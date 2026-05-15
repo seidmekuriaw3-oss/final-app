@@ -655,12 +655,131 @@
         });
     }
     {% if session.get('user_id') %}
+    let _prevNotifCount = -1;
+
     function pollNotifCount() {
         fetch('/api/notifications/count')
             .then(r => r.json())
-            .then(d => updateBellBadge(d.count || 0))
+            .then(d => {
+                const count = d.count || 0;
+                updateBellBadge(count);
+                // Show toast only when count goes UP after the initial load
+                if (_prevNotifCount >= 0 && count > _prevNotifCount) {
+                    _fetchAndShowNotifToast();
+                }
+                _prevNotifCount = count;
+            })
             .catch(() => {});
     }
+
+    function _fetchAndShowNotifToast() {
+        fetch('/api/notifications')
+            .then(r => r.json())
+            .then(d => {
+                if (!d.notifications || d.notifications.length === 0) return;
+                const n = d.notifications[0];
+                if (n.is_read) return;
+                _showNotifToast(n);
+            })
+            .catch(() => {});
+    }
+
+    function _escHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = String(text);
+        return div.innerHTML;
+    }
+
+    function _showNotifToast(notif) {
+        const existing = document.getElementById('_notifLiveToast');
+        if (existing) { clearTimeout(existing._tmr); existing.remove(); }
+
+        const isMobile = window.innerWidth <= 768;
+        const bottomPx = isMobile ? '75px' : '20px';
+        const title = notif.title || 'New Notification';
+        const body  = notif.body
+            ? (notif.body.length > 90 ? notif.body.slice(0, 90) + '…' : notif.body)
+            : '';
+        const link  = notif.link || '/dashboard?tab=notifs';
+
+        const el = document.createElement('div');
+        el.id = '_notifLiveToast';
+        el.setAttribute('role', 'alert');
+        el.style.cssText = [
+            'position:fixed',
+            'bottom:' + bottomPx,
+            'left:50%',
+            'transform:translateX(-50%) translateY(130%)',
+            'opacity:0',
+            'background:linear-gradient(135deg,#0d47a1,#1a73e8)',
+            'color:#fff',
+            'border-radius:18px',
+            'box-shadow:0 10px 30px rgba(0,0,0,0.25)',
+            'padding:14px 16px',
+            'display:flex',
+            'align-items:flex-start',
+            'gap:12px',
+            'z-index:10001',
+            'max-width:min(390px,calc(100vw - 32px))',
+            'min-width:260px',
+            'cursor:pointer',
+            'overflow:hidden',
+            'transition:transform 0.42s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s ease',
+        ].join(';');
+
+        el.innerHTML =
+            '<div style="font-size:24px;flex-shrink:0;margin-top:1px;">🔔</div>' +
+            '<div style="flex:1;min-width:0;">' +
+                '<div style="font-weight:800;font-size:13px;line-height:1.35;">' + _escHtml(title) + '</div>' +
+                (body ? '<div style="font-size:12px;opacity:0.85;margin-top:4px;line-height:1.45;">' + _escHtml(body) + '</div>' : '') +
+                '<div style="font-size:10px;opacity:0.65;margin-top:5px;">{% if lang == "am" %}ለማስተካከል ጫን{% elif lang == "ar" %}انقر للعرض{% else %}Tap to view{% endif %}</div>' +
+            '</div>' +
+            '<button id="_notifToastClose" style="background:none;border:none;color:rgba(255,255,255,0.75);font-size:22px;padding:0 2px 0 10px;cursor:pointer;flex-shrink:0;line-height:1;transition:color .2s;">&times;</button>' +
+            '<div id="_notifToastBar" style="position:absolute;bottom:0;left:0;height:3px;background:rgba(255,255,255,0.35);border-radius:0 0 18px 18px;width:100%;"></div>';
+
+        document.body.appendChild(el);
+
+        el.addEventListener('click', function(e) {
+            if (e.target.id === '_notifToastClose') return;
+            window.location.href = link;
+        });
+        const closeBtn = document.getElementById('_notifToastClose');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                _dismissNotifToast(el);
+            });
+            closeBtn.addEventListener('mouseenter', function() { this.style.color = '#fff'; });
+            closeBtn.addEventListener('mouseleave', function() { this.style.color = 'rgba(255,255,255,0.75)'; });
+        }
+
+        // Slide in
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                el.style.transform = 'translateX(-50%) translateY(0)';
+                el.style.opacity = '1';
+                // Shrink progress bar over 5 s
+                var bar = document.getElementById('_notifToastBar');
+                if (bar) {
+                    bar.style.transition = 'width 5s linear';
+                    bar.style.width = '0%';
+                }
+            });
+        });
+
+        // Auto-dismiss after 5 s
+        el._tmr = setTimeout(function() { _dismissNotifToast(el); }, 5000);
+    }
+
+    function _dismissNotifToast(el) {
+        if (!el || !el.parentNode) return;
+        clearTimeout(el._tmr);
+        el.style.transform = 'translateX(-50%) translateY(130%)';
+        el.style.opacity = '0';
+        setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 420);
+    }
+
     pollNotifCount();
     setInterval(pollNotifCount, 30000);
     // Re-poll when user returns to the tab
