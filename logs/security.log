@@ -18620,3 +18620,10 @@ werkzeug.routing.exceptions.BuildError: Could not build url for endpoint 'user_l
 2026-05-15 02:54:41,287 - app - WARNING - 404 Error: http://5f3e96cd-4cb4-4971-9fb5-dcf1c34cec56-00-11oi4cmd5q5mj.janeway.replit.dev/go/cart/add/4?qty=1
 2026-05-15 02:54:46,385 - app - WARNING - 404 Error: http://5f3e96cd-4cb4-4971-9fb5-dcf1c34cec56-00-11oi4cmd5q5mj.janeway.replit.dev/go/cart/add/4?qty=1
 2026-05-15 03:00:40,576 - app - WARNING - 404 Error: http://localhost:5000/api/products?category=Sofa
+2026-05-15 13:23:13,261 - app - WARNING - 404 Error: http://892b4bfa-1bd3-423d-96de-fefcf7c988e0-00-1o85xzp9b1a5t.worf.replit.dev/static/images/logo.svg
+2026-05-15 13:23:38,438 - app - WARNING - 404 Error: http://892b4bfa-1bd3-423d-96de-fefcf7c988e0-00-1o85xzp9b1a5t.worf.replit.dev/favicon.ico
+2026-05-15 13:27:07,680 - app - WARNING - Slow request: POST /admin/products/create - 1.40s
+2026-05-15 13:30:14,257 - app - WARNING - Slow request: POST /admin/ads/create - 1.93s
+2026-05-15 13:30:23,483 - app - WARNING - Slow request: POST /admin/ads/create - 10.01s
+2026-05-15 13:30:32,106 - app - WARNING - Slow request: POST /admin/ads/create - 8.13s
+2026-05-15 13:30:39,780 - app - WARNING - Slow request: POST /admin/ads/create - 8.25s

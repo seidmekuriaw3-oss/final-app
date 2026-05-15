@@ -980,6 +980,69 @@ def wishlist():
         return redirect(url_for('customer.index'))
 
 
+# ==================== CUSTOMER DASHBOARD ====================
+
+@customer_bp.route('/dashboard')
+@user_login_required
+def dashboard():
+    """Unified customer dashboard with all user features."""
+    lang = get_lang()
+    tab = request.args.get('tab', 'overview')
+    try:
+        conn = get_db()
+        conn.row_factory = __import__('sqlite3').Row
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM users WHERE id = ?", (session['user_id'],))
+        user_row = cursor.fetchone()
+        user = dict(user_row) if user_row else {}
+
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+                SUM(CASE WHEN status NOT IN ('delivered','cancelled') THEN 1 ELSE 0 END) as active,
+                COALESCE(SUM(total), 0) as total_spent
+            FROM orders WHERE user_id = ?
+        """, (session['user_id'],))
+        stats_row = cursor.fetchone()
+        order_stats = dict(stats_row) if stats_row else {}
+
+        cursor.execute("""
+            SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC LIMIT 50
+        """, (session['user_id'],))
+        orders_raw = cursor.fetchall()
+        orders = [dict(o) for o in orders_raw] if orders_raw else []
+
+        try:
+            cursor.execute("""
+                SELECT w.*, p.name, p.name_am, p.name_ar, p.price, p.compare_price,
+                       p.thumbnail, p.is_active
+                FROM wishlist w JOIN products p ON w.product_id = p.id
+                WHERE w.user_id = ? AND p.is_active = 1
+                ORDER BY w.created_at DESC
+            """, (session['user_id'],))
+            wishlist_raw = cursor.fetchall()
+            wishlist_items = [dict(i) for i in wishlist_raw] if wishlist_raw else []
+        except Exception:
+            wishlist_items = []
+
+        return render_template('auth/dashboard.html',
+                               user=user,
+                               order_stats=order_stats,
+                               orders=orders,
+                               wishlist_items=wishlist_items,
+                               active_tab=tab,
+                               lang=lang)
+    except Exception as e:
+        import traceback
+        print(f"Dashboard error: {e}\n{traceback.format_exc()}")
+        flash('Error loading dashboard.', 'error')
+        return redirect(url_for('customer.index'))
+
+
 # ==================== ADMIN LOGIN REDIRECT ====================
 
 @customer_bp.route('/admin-login', methods=['GET', 'POST'])

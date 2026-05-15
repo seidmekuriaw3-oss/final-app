@@ -189,13 +189,17 @@
     <div class="menu-section">
         <div class="menu-title">👤 MY ACCOUNT</div>
         {% if session.get('user_id') %}
-            <a href="{{ url_for('customer.user_profile') }}" class="menu-item">
-                <span class="icon">👤</span>
-                <span class="text">My Profile</span>
+            <a href="{{ url_for('customer.dashboard') }}" class="menu-item" style="background:linear-gradient(90deg,rgba(26,115,232,0.10),rgba(26,115,232,0.04));border-left:3px solid #1a73e8;">
+                <span class="icon">📊</span>
+                <span class="text" style="color:#1a73e8;font-weight:700;">My Dashboard</span>
             </a>
-            <a href="{{ url_for('customer.user_orders') }}" class="menu-item">
+            <a href="{{ url_for('customer.dashboard', tab='orders') }}" class="menu-item">
                 <span class="icon">📦</span>
                 <span class="text">My Orders</span>
+            </a>
+            <a href="{{ url_for('customer.dashboard', tab='wishlist') }}" class="menu-item">
+                <span class="icon">❤️</span>
+                <span class="text">Wishlist</span>
             </a>
         {% else %}
             <a href="#" class="menu-item" onclick="openUserModal(); closeHamburgerMenu();">

@@ -1230,3 +1230,38 @@ def api_get_user_profile():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ==================== ORDER TRACKING API ====================
+
+@api_bp.route('/track-order')
+def api_track_order():
+    """AJAX order tracking by order number."""
+    order_number = request.args.get('order_number', '').strip()
+    if not order_number:
+        return jsonify({'success': False, 'error': 'Order number is required'}), 400
+    try:
+        db = get_db()
+        db.row_factory = __import__('sqlite3').Row
+        cursor = db.cursor()
+        cursor.execute("""
+            SELECT o.id, o.order_number, o.status, o.total,
+                   o.payment_method, o.payment_status,
+                   o.shipping_city, o.shipping_address,
+                   o.tracking_number, o.created_at
+            FROM orders o
+            WHERE o.order_number = ?
+        """, (order_number,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({'success': False, 'error': 'Order not found'}), 404
+
+        order = dict(row)
+        if order.get('created_at') and not isinstance(order['created_at'], str):
+            order['created_at'] = order['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+        elif order.get('created_at') is None:
+            order['created_at'] = ''
+
+        return jsonify({'success': True, 'order': order})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
