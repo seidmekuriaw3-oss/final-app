@@ -18631,3 +18631,6 @@ werkzeug.routing.exceptions.BuildError: Could not build url for endpoint 'user_l
 2026-05-15 16:41:22,002 - app - WARNING - 404 Error: http://7fa9b376-1589-487c-86ad-64b79a074282-00-jmqm26eb94al.spock.replit.dev/favicon.ico
 2026-05-15 16:56:57,003 - app - WARNING - 404 Error: http://7fa9b376-1589-487c-86ad-64b79a074282-00-jmqm26eb94al.spock.replit.dev/static/images/logo.svg
 2026-05-15 17:01:19,561 - app - WARNING - 404 Error: http://7fa9b376-1589-487c-86ad-64b79a074282-00-jmqm26eb94al.spock.replit.dev/favicon.ico
+2026-05-15 17:04:40,191 - app - WARNING - Slow request: POST /admin/products/create - 2.46s
+2026-05-15 17:06:31,047 - app - WARNING - Slow request: POST /admin/ads/create - 2.09s
+2026-05-15 17:06:39,140 - app - WARNING - Slow request: POST /admin/ads/create - 8.91s
