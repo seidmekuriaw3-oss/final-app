@@ -323,10 +323,18 @@
         <span class="nav-icon">🛒</span>
         <span class="nav-label">{{ t.cart }}</span>
     </a>
+    {% if session.get('user_id') %}
+    <a href="{{ url_for('customer.dashboard', tab='notifs') }}" class="nav-item {% if request.endpoint == 'customer.dashboard' %}active{% endif %}" style="position:relative;">
+        <span class="nav-icon">🔔</span>
+        <span id="bottomNavBellBadge" style="display:none;position:absolute;top:2px;right:6px;background:#f44336;color:#fff;border-radius:50%;font-size:9px;font-weight:900;padding:1px 4px;min-width:15px;text-align:center;line-height:15px;">0</span>
+        <span class="nav-label">{% if lang == 'am' %}ማሳወቂያ{% elif lang == 'ar' %}الإشعارات{% else %}Alerts{% endif %}</span>
+    </a>
+    {% else %}
     <a href="{{ url_for('customer.dashboard') }}" class="nav-item {% if request.endpoint == 'customer.dashboard' %}active{% endif %}">
         <span class="nav-icon">📊</span>
         <span class="nav-label">{% if lang == 'am' %}ዳሽቦርድ{% elif lang == 'ar' %}لوحتي{% else %}Dashboard{% endif %}</span>
     </a>
+    {% endif %}
 </nav>
 
 <!-- ==================== CATEGORIES MODAL ==================== -->
@@ -635,7 +643,7 @@
 
     // ==================== NOTIFICATION BELL ====================
     function updateBellBadge(count) {
-        ['desktopBellBadge','mobileBellBadge','menuBellBadge'].forEach(id => {
+        ['desktopBellBadge','mobileBellBadge','menuBellBadge','bottomNavBellBadge'].forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
             if (count > 0) {

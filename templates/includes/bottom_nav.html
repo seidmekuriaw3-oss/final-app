@@ -23,11 +23,20 @@
         <span id="bottomCartCount" class="cart-count" style="display: none;">0</span>
     </a>
     
-    <!-- Account / User -->
+    <!-- Account / Notifications -->
+    {% if session.get('user_id') %}
+    <a href="{{ url_for('customer.dashboard', tab='notifs') }}" class="nav-item" style="position:relative;"
+       data-tooltip="{% if lang == 'am' %}ማሳወቂያዎች{% else %}Notifications{% endif %}">
+        <span class="nav-icon">🔔</span>
+        <span id="bottomNavBellBadge" style="display:none;position:absolute;top:2px;right:6px;background:#f44336;color:#fff;border-radius:50%;font-size:9px;font-weight:900;padding:1px 4px;min-width:15px;text-align:center;line-height:15px;">0</span>
+        <span class="nav-label">{% if lang == 'am' %}ማሳወቂያ{% elif lang == 'ar' %}الإشعارات{% else %}Alerts{% endif %}</span>
+    </a>
+    {% else %}
     <div class="nav-item" onclick="openUserModal()" data-tooltip="{% if lang == 'am' %}አካውንት{% else %}Account{% endif %}">
         <span class="nav-icon">👤</span>
         <span class="nav-label">{% if lang == 'am' %}አካውንት{% else %}Account{% endif %}</span>
     </div>
+    {% endif %}
     
     <!-- WhatsApp Contact (Optional) -->
     <a href="https://wa.me/{{ settings.whatsapp_number|default('251906020606') }}" 
