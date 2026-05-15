@@ -14,6 +14,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from middleware.auth import user_login_required
 from database.db import get_db
 import json
+from services.notification_service import notify_user, notify_admin
 
 cart_bp = Blueprint('cart', __name__)
 
@@ -464,6 +465,26 @@ def place_order():
     db.commit()
     
     flash(f'Order placed successfully! Your order number is: {order_number}', 'success')
+
+    try:
+        notify_user(
+            session['user_id'],
+            '✅ Order Placed Successfully',
+            f'Your order #{order_number} has been received. We will confirm it shortly.',
+            type='order',
+            link=f'/orders/{order_id}'
+        )
+        notify_admin(
+            '🛒 New Order Received',
+            f'Order #{order_number} was placed. Total: {total:.0f} ETB.',
+            type='new_order',
+            link=f'/admin/orders/{order_id}',
+            ref_order_id=order_id,
+            ref_user_id=session.get('user_id')
+        )
+    except Exception:
+        pass
+
     return redirect(url_for('customer.order_confirmation', order_id=order_id))
 
 

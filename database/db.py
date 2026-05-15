@@ -360,6 +360,37 @@ def init_db():
         )
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS user_notifications (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            type TEXT DEFAULT 'info',
+            link TEXT DEFAULT '',
+            is_read SMALLINT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS admin_alerts (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            type TEXT DEFAULT 'info',
+            link TEXT DEFAULT '',
+            ref_order_id INTEGER,
+            ref_user_id INTEGER,
+            is_read SMALLINT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_user_notif_user ON user_notifications(user_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_user_notif_read ON user_notifications(is_read)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_admin_alerts_read ON admin_alerts(is_read)")
+
     cur.execute("CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_products_featured ON products(is_featured)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active)")

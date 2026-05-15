@@ -97,6 +97,14 @@
                 🛒
                 <span id="desktop-cart-count" class="cart-count" style="display: none;">0</span>
             </a>
+            {% if session.get('user_id') %}
+            <a href="{{ url_for('customer.dashboard', tab='notifs') }}" id="desktopBellLink"
+               style="position:relative;font-size:20px;text-decoration:none;color:rgba(255,255,255,0.9);"
+               title="{% if lang == 'am' %}ማሳወቂያዎች{% else %}Notifications{% endif %}">
+                🔔
+                <span id="desktopBellBadge" style="display:none;position:absolute;top:-5px;right:-7px;background:#f44336;color:#fff;border-radius:50%;font-size:9px;font-weight:900;padding:1px 4px;min-width:16px;text-align:center;line-height:16px;">0</span>
+            </a>
+            {% endif %}
         </div>
         
         <!-- Mobile Icons -->
@@ -106,6 +114,12 @@
                 🛒 <span id="cart-count" class="cart-count" style="display: none;">0</span>
             </a>
             
+            {% if session.get('user_id') %}
+            <a href="{{ url_for('customer.dashboard', tab='notifs') }}" id="mobileBellLink"
+               style="position:relative;font-size:20px;color:rgba(255,255,255,0.9);text-decoration:none;margin-right:4px;">
+                🔔<span id="mobileBellBadge" style="display:none;position:absolute;top:-5px;right:-6px;background:#f44336;color:#fff;border-radius:50%;font-size:9px;font-weight:900;padding:1px 4px;min-width:15px;text-align:center;line-height:15px;">0</span>
+            </a>
+            {% endif %}
             <!-- Hamburger Menu Button -->
             <button class="hamburger-btn" onclick="openHamburgerMenu()">
                 ☰ <span>MENU</span>
@@ -613,6 +627,30 @@
         if (originalUpdateCartCount) originalUpdateCartCount(count);
         updateCartCounts(count);
     };
+
+    // ==================== NOTIFICATION BELL ====================
+    function updateBellBadge(count) {
+        ['desktopBellBadge','mobileBellBadge'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (count > 0) {
+                el.textContent = count > 99 ? '99+' : count;
+                el.style.display = 'inline-block';
+            } else {
+                el.style.display = 'none';
+            }
+        });
+    }
+    {% if session.get('user_id') %}
+    function pollNotifCount() {
+        fetch('/api/notifications/count')
+            .then(r => r.json())
+            .then(d => updateBellBadge(d.count || 0))
+            .catch(() => {});
+    }
+    pollNotifCount();
+    setInterval(pollNotifCount, 45000);
+    {% endif %}
     
     // ==================== HAMBURGER MENU ====================
     function openHamburgerMenu() {

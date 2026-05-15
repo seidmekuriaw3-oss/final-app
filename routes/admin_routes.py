@@ -18,6 +18,10 @@ import uuid
 import csv
 from io import StringIO
 import datetime as datetime_
+from services.notification_service import (
+    notify_user, notify_admin,
+    get_admin_alerts, get_admin_unread_count, mark_admin_alerts_read
+)
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -885,6 +889,32 @@ def order_update_status(oid):
 
         conn.commit()
 
+        status_icons = {
+            'confirmed':  '✅', 'processing': '⚙️', 'shipped': '🚚',
+            'delivered':  '🎉', 'cancelled':  '❌', 'pending': '⏳'
+        }
+        status_msgs = {
+            'confirmed':  'Your order has been confirmed and is being prepared.',
+            'processing': 'Your order is being processed by our team.',
+            'shipped':    'Your order is on its way! Expect delivery soon.',
+            'delivered':  f'Your order has been delivered! You earned {max(1,int(order_total//100)) if order_total else 1} loyalty points.',
+            'cancelled':  'Your order has been cancelled. Contact us if you have questions.',
+            'pending':    'Your order is pending review.',
+        }
+        if user_id and prev_status != status:
+            try:
+                icon = status_icons.get(status, '📦')
+                msg  = status_msgs.get(status, f'Order status updated to {status}.')
+                notify_user(
+                    user_id,
+                    f'{icon} Order #{oid} — {status.title()}',
+                    msg,
+                    type='order',
+                    link=f'/orders/{oid}'
+                )
+            except Exception:
+                pass
+
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'success': True, 'status': status})
 
@@ -1558,13 +1588,41 @@ def send_notification():
                   image_url, link, target, session.get('admin_username', 'admin')))
             conn.commit()
 
-            flash('Notification saved!', 'success')
+            # Fan-out to user_notifications table so customers see it in dashboard
+            try:
+                cursor.execute("SELECT id FROM users WHERE is_admin = 0 AND is_active = 1")
+                user_rows = cursor.fetchall()
+                for ur in (user_rows or []):
+                    uid = ur[0]
+                    notify_user(uid, title, body, type='info', link=link or '')
+            except Exception:
+                pass
+
+            flash('Notification sent to all customers!', 'success')
         except Exception as e:
             print(f"Send notification error: {e}")
             flash('Error sending notification.', 'error')
         return redirect(url_for('admin.send_notification'))
 
     return render_template('admin/send_notification.html', lang=lang)
+
+
+@admin_bp.route('/alerts')
+@admin_required
+def admin_alerts_page():
+    """Admin alerts inbox page."""
+    lang = get_lang()
+    alerts = get_admin_alerts(limit=100)
+    unread = get_admin_unread_count()
+    return render_template('admin/alerts.html', alerts=alerts, unread=unread, lang=lang)
+
+
+@admin_bp.route('/alerts/mark-read', methods=['POST'])
+@admin_required
+def admin_mark_alerts_read():
+    alert_id = request.json.get('id') if request.is_json else None
+    mark_admin_alerts_read(alert_id)
+    return jsonify({'success': True})
 
 
 # ==================== REVIEWS ====================

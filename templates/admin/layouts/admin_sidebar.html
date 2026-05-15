@@ -277,6 +277,26 @@
                 <span class="nav-icon">🔔</span>
                 <span class="nav-text">Push Notifications</span>
             </a>
+
+            <a href="{{ url_for('admin.admin_alerts_page') }}" class="nav-item" style="
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 10px 20px;
+                color: rgba(255,255,255,0.8);
+                text-decoration: none;
+                transition: all 0.3s;
+                border-left: 3px solid transparent;
+                position: relative;
+            ">
+                <span class="nav-icon">📬</span>
+                <span class="nav-text">Alert Inbox</span>
+                <span id="sidebarAlertBadge" style="
+                    margin-left:auto;background:#f44336;color:#fff;
+                    font-size:10px;font-weight:800;padding:2px 7px;
+                    border-radius:20px;display:none;
+                ">0</span>
+            </a>
         </div>
 
         <!-- Reports Section -->

@@ -1265,3 +1265,67 @@ def api_track_order():
         return jsonify({'success': True, 'order': order})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ==================== NOTIFICATION API ====================
+
+@api_bp.route('/notifications')
+def api_get_notifications():
+    """Return current user's notifications."""
+    if not session.get('user_id'):
+        return jsonify({'success': False, 'notifications': [], 'unread': 0})
+    from services.notification_service import get_user_notifications, get_user_unread_count
+    notifs = get_user_notifications(session['user_id'], limit=50)
+    unread = get_user_unread_count(session['user_id'])
+    return jsonify({'success': True, 'notifications': notifs, 'unread': unread})
+
+
+@api_bp.route('/notifications/count')
+def api_notification_count():
+    """Return unread notification count for current user."""
+    if not session.get('user_id'):
+        return jsonify({'count': 0})
+    from services.notification_service import get_user_unread_count
+    return jsonify({'count': get_user_unread_count(session['user_id'])})
+
+
+@api_bp.route('/notifications/mark-read', methods=['POST'])
+def api_mark_notifications_read():
+    """Mark one or all notifications as read."""
+    if not session.get('user_id'):
+        return jsonify({'success': False}), 401
+    from services.notification_service import mark_user_notifications_read
+    data = request.get_json(silent=True) or {}
+    notif_id = data.get('id')
+    mark_user_notifications_read(session['user_id'], notif_id)
+    return jsonify({'success': True})
+
+
+@api_bp.route('/admin/alerts')
+def api_admin_alerts():
+    """Return admin alerts (admin only)."""
+    if not session.get('admin'):
+        return jsonify({'success': False}), 403
+    from services.notification_service import get_admin_alerts, get_admin_unread_count
+    alerts = get_admin_alerts(limit=60)
+    unread = get_admin_unread_count()
+    return jsonify({'success': True, 'notifications': alerts, 'unread_count': unread})
+
+
+@api_bp.route('/admin/alerts/count')
+def api_admin_alerts_count():
+    """Return unread admin alert count."""
+    if not session.get('admin'):
+        return jsonify({'count': 0})
+    from services.notification_service import get_admin_unread_count
+    return jsonify({'count': get_admin_unread_count()})
+
+
+@api_bp.route('/admin/alerts/mark-read', methods=['POST'])
+def api_admin_mark_alerts_read():
+    if not session.get('admin'):
+        return jsonify({'success': False}), 403
+    from services.notification_service import mark_admin_alerts_read
+    data = request.get_json(silent=True) or {}
+    mark_admin_alerts_read(data.get('id'))
+    return jsonify({'success': True})

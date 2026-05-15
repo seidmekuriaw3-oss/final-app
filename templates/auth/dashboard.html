@@ -635,6 +635,10 @@
                 <span style="margin-left:auto;background:#f59e0b;color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;">{{ loyalty_points }} pts</span>
                 {% endif %}
             </button>
+            <button class="db-nav-item" id="snav-notifs" onclick="switchPanel('notifs');markAllNotifsRead();" style="position:relative;">
+                <span class="db-nav-icon">🔔</span> Notifications
+                <span id="snavNotifBadge" style="margin-left:auto;background:#f44336;color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;display:none;">0</span>
+            </button>
             <div class="db-nav-divider"></div>
             <a class="db-nav-item" href="{{ url_for('cart.view_cart') }}">
                 <span class="db-nav-icon">🛒</span> My Cart
@@ -676,6 +680,10 @@
         </button>
         <button class="db-tab-btn" id="mnav-rewards" onclick="switchPanel('rewards')">
             <span class="tab-icon">🏆</span>Rewards
+        </button>
+        <button class="db-tab-btn" id="mnav-notifs" onclick="switchPanel('notifs');markAllNotifsRead();" style="position:relative;">
+            <span class="tab-icon">🔔</span>Alerts
+            <span id="mnavNotifBadge" style="position:absolute;top:2px;right:2px;background:#f44336;color:#fff;border-radius:50%;font-size:8px;font-weight:900;padding:1px 3px;display:none;">0</span>
         </button>
     </div>
 
@@ -1158,6 +1166,25 @@
     </div>
 
     <!-- ══════════════════════════════════════
+         PANEL 8: NOTIFICATIONS
+    ══════════════════════════════════════ -->
+    <div class="db-panel" id="panel-notifs">
+        <div class="section-head">
+            <h2 class="section-title">🔔 Notifications</h2>
+            <button onclick="markAllNotifsRead()" id="markAllBtn"
+                    style="background:#1a73e8;color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">
+                ✅ Mark All Read
+            </button>
+        </div>
+        <div id="notifList" style="display:flex;flex-direction:column;gap:10px;">
+            <div style="text-align:center;padding:40px;color:#aaa;">
+                <div style="font-size:40px;margin-bottom:10px;">⏳</div>
+                <p>Loading notifications…</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
          PANEL 7: REWARDS
     ══════════════════════════════════════ -->
     <div class="db-panel" id="panel-rewards">
@@ -1278,7 +1305,7 @@
 /* ═══════════════════════════════════════════════
    PANEL SWITCHING
 ═══════════════════════════════════════════════ */
-const PANELS = ['overview','orders','wishlist','track','profile','settings','rewards'];
+const PANELS = ['overview','orders','wishlist','track','profile','settings','rewards','notifs'];
 
 function switchPanel(name) {
     PANELS.forEach(p => {
@@ -1534,6 +1561,106 @@ function doDeleteAccount() {
     })
     .catch(() => showToast('Network error', 'error'));
 }
+
+/* ═══════════════════════════════════════════════
+   NOTIFICATIONS PANEL
+═══════════════════════════════════════════════ */
+const NOTIF_ICONS = {
+    order:   '📦', welcome: '🎉', info: 'ℹ️',
+    success: '✅', warning: '⚠️', error: '❌'
+};
+const NOTIF_COLORS = {
+    order:   '#e8f0fe', welcome: '#e8f5e9', info: '#f3f4f6',
+    success: '#e8f5e9', warning: '#fff8e1', error: '#ffebee'
+};
+
+function loadNotifications() {
+    fetch('/api/notifications')
+        .then(r => r.json())
+        .then(d => {
+            const list = document.getElementById('notifList');
+            if (!list) return;
+            const badge = d.unread || 0;
+            updateNotifBadges(badge);
+            if (!d.notifications || d.notifications.length === 0) {
+                list.innerHTML = `<div style="text-align:center;padding:50px 20px;color:#aaa;">
+                    <div style="font-size:50px;margin-bottom:12px;">🔔</div>
+                    <div style="font-weight:700;color:#666;font-size:15px;margin-bottom:6px;">No notifications yet</div>
+                    <div style="font-size:13px;">We'll let you know about your orders and updates here.</div>
+                </div>`;
+                return;
+            }
+            list.innerHTML = d.notifications.map(n => {
+                const icon  = NOTIF_ICONS[n.type] || 'ℹ️';
+                const color = NOTIF_COLORS[n.type] || '#f3f4f6';
+                const unreadStyle = n.is_read ? '' : 'border-left:4px solid #1a73e8;';
+                const link = n.link
+                    ? `onclick="window.location.href='${n.link}'"`
+                    : '';
+                return `<div style="background:${color};border-radius:14px;padding:14px 16px;cursor:${n.link ? 'pointer' : 'default'};
+                               ${unreadStyle}display:flex;gap:14px;align-items:flex-start;opacity:${n.is_read ? 0.7 : 1};"
+                          ${link}>
+                    <div style="font-size:24px;flex-shrink:0;margin-top:2px;">${icon}</div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:14px;font-weight:${n.is_read ? 600 : 800};color:#1a1a2e;">${escapeHtmlDb(n.title)}</div>
+                        <div style="font-size:12px;color:#555;margin-top:3px;">${escapeHtmlDb(n.body)}</div>
+                        <div style="font-size:10px;color:#aaa;margin-top:4px;">${n.created_at}</div>
+                    </div>
+                    ${!n.is_read ? `<div style="width:8px;height:8px;background:#1a73e8;border-radius:50%;flex-shrink:0;margin-top:6px;"></div>` : ''}
+                </div>`;
+            }).join('');
+        })
+        .catch(() => {
+            const list = document.getElementById('notifList');
+            if (list) list.innerHTML = '<div style="text-align:center;padding:30px;color:#aaa;">Could not load notifications.</div>';
+        });
+}
+
+function markAllNotifsRead() {
+    fetch('/api/notifications/mark-read', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({})
+    }).then(() => {
+        updateNotifBadges(0);
+        loadNotifications();
+    }).catch(() => {});
+}
+
+function updateNotifBadges(count) {
+    ['snavNotifBadge','mnavNotifBadge'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (count > 0) {
+            el.textContent = count > 99 ? '99+' : count;
+            el.style.display = 'inline-block';
+        } else {
+            el.style.display = 'none';
+        }
+    });
+    // Also sync the global bell badges in the header
+    if (typeof updateBellBadge === 'function') updateBellBadge(count);
+}
+
+function escapeHtmlDb(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Load notifs when notifs panel is opened — patch after declaration
+document.addEventListener('DOMContentLoaded', function() {
+    const _orig = window.switchPanel || switchPanel;
+    window.switchPanel = function(name) {
+        _orig(name);
+        if (name === 'notifs') loadNotifications();
+    };
+    // If the page URL already requests notifs tab, load now
+    if (new URLSearchParams(location.search).get('tab') === 'notifs') {
+        loadNotifications();
+    }
+});
 
 /* ═══════════════════════════════════════════════
    TOAST

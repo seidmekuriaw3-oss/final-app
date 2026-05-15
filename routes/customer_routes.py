@@ -14,6 +14,7 @@ from middleware.platform import get_platform, is_android_app
 from database.db import get_db
 from werkzeug.security import generate_password_hash, check_password_hash
 from services.whatsapp_service import WhatsAppService
+from services.notification_service import notify_user, notify_admin
 import re
 import os
 import urllib.parse
@@ -554,6 +555,25 @@ def user_register():
             session['user_phone'] = phone
 
             flash('Registration successful! Welcome to Ethiosadat Furniture!', 'success')
+
+            try:
+                notify_user(
+                    user_id,
+                    '🎉 Welcome to Ethiosadat Furniture!',
+                    f'Hello {full_name}! Your account is ready. Enjoy 10% discount on all orders.',
+                    type='welcome',
+                    link='/dashboard'
+                )
+                notify_admin(
+                    '👤 New Customer Registered',
+                    f'{full_name} ({email}) just created an account.',
+                    type='new_user',
+                    link='/admin/users',
+                    ref_user_id=user_id
+                )
+            except Exception:
+                pass
+
             return redirect(url_for('customer.index'))
         except Exception as e:
             print(f"Register error: {e}")
