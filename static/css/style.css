@@ -1796,6 +1796,11 @@ select.form-control {
         display: none !important;
     }
     
+    /* Hide mobile bell in header-icons on desktop — bell already shown in desktop-nav */
+    #mobileBellLink {
+        display: none !important;
+    }
+    
     /* Only show cart in desktop-nav */
     .desktop-nav .cart-link {
         display: flex !important;

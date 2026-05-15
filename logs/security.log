@@ -18628,3 +18628,4 @@ werkzeug.routing.exceptions.BuildError: Could not build url for endpoint 'user_l
 2026-05-15 13:30:32,106 - app - WARNING - Slow request: POST /admin/ads/create - 8.13s
 2026-05-15 13:30:39,780 - app - WARNING - Slow request: POST /admin/ads/create - 8.25s
 2026-05-15 13:48:16,290 - app - WARNING - 404 Error: http://892b4bfa-1bd3-423d-96de-fefcf7c988e0-00-1o85xzp9b1a5t.worf.replit.dev/favicon.ico
+2026-05-15 16:41:22,002 - app - WARNING - 404 Error: http://7fa9b376-1589-487c-86ad-64b79a074282-00-jmqm26eb94al.spock.replit.dev/favicon.ico

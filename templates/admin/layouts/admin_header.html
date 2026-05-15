@@ -471,24 +471,31 @@
     // Refresh notifications count periodically
     let notifInterval = null;
     
+    function fetchAdminAlertCount() {
+        fetch('/api/admin/alerts/count')
+            .then(res => res.json())
+            .then(data => {
+                const badge = document.getElementById('notificationBadge');
+                if (badge && data.count && data.count > 0) {
+                    badge.textContent = data.count > 99 ? '99+' : data.count;
+                    badge.style.display = 'inline-block';
+                } else if (badge) {
+                    badge.style.display = 'none';
+                }
+            })
+            .catch(err => console.error('Error fetching notification count:', err));
+    }
+
     function initNotificationPolling() {
         if (notifInterval) clearInterval(notifInterval);
-        
-        notifInterval = setInterval(() => {
-            fetch('/api/admin/alerts/count')
-                .then(res => res.json())
-                .then(data => {
-                    const badge = document.getElementById('notificationBadge');
-                    if (badge && data.count && data.count > 0) {
-                        badge.textContent = data.count > 99 ? '99+' : data.count;
-                        badge.style.display = 'inline-block';
-                    } else if (badge) {
-                        badge.style.display = 'none';
-                    }
-                })
-                .catch(err => console.error('Error fetching notification count:', err));
-        }, 30000);
+        fetchAdminAlertCount();
+        notifInterval = setInterval(fetchAdminAlertCount, 30000);
     }
+    
+    // Re-fetch count when user returns to the tab
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') fetchAdminAlertCount();
+    });
     
     // Initialize when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {

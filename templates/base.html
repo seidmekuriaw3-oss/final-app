@@ -212,6 +212,11 @@
                 <span class="icon">❤️</span>
                 <span class="text">Wishlist</span>
             </a>
+            <a href="{{ url_for('customer.dashboard', tab='notifs') }}" class="menu-item" onclick="closeHamburgerMenu();">
+                <span class="icon">🔔</span>
+                <span class="text">{% if lang == 'am' %}ማሳወቂያዎች{% elif lang == 'ar' %}الإشعارات{% else %}Notifications{% endif %}</span>
+                <span id="menuBellBadge" class="badge" style="display:none;">0</span>
+            </a>
         {% else %}
             <a href="#" class="menu-item" onclick="openUserModal(); closeHamburgerMenu();">
                 <span class="icon">🔐</span>
@@ -630,7 +635,7 @@
 
     // ==================== NOTIFICATION BELL ====================
     function updateBellBadge(count) {
-        ['desktopBellBadge','mobileBellBadge'].forEach(id => {
+        ['desktopBellBadge','mobileBellBadge','menuBellBadge'].forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
             if (count > 0) {
@@ -649,7 +654,11 @@
             .catch(() => {});
     }
     pollNotifCount();
-    setInterval(pollNotifCount, 45000);
+    setInterval(pollNotifCount, 30000);
+    // Re-poll when user returns to the tab
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') pollNotifCount();
+    });
     {% endif %}
     
     // ==================== HAMBURGER MENU ====================
