@@ -862,8 +862,27 @@ def order_update_status(oid):
 
         conn = get_db()
         cursor = conn.cursor()
+
+        cursor.execute("SELECT status, user_id, total FROM orders WHERE id = ?", (oid,))
+        prev = cursor.fetchone()
+        prev_status = prev[0] if prev else None
+        user_id = prev[1] if prev else None
+        order_total = float(prev[2]) if prev and prev[2] else 0
+
         cursor.execute("UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                        (status, oid))
+
+        if status == 'delivered' and prev_status != 'delivered' and user_id:
+            points_earned = max(1, int(order_total // 100))
+            cursor.execute(
+                "UPDATE users SET loyalty_points = COALESCE(loyalty_points, 0) + ? WHERE id = ?",
+                (points_earned, user_id)
+            )
+            cursor.execute(
+                "INSERT INTO loyalty_transactions (user_id, order_id, points, type, description) VALUES (?, ?, ?, 'earn', ?)",
+                (user_id, oid, points_earned, f'Points earned for order #{oid}')
+            )
+
         conn.commit()
 
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':

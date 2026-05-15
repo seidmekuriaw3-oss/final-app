@@ -1029,11 +1029,40 @@ def dashboard():
         except Exception:
             wishlist_items = []
 
+        loyalty_points = 0
+        loyalty_transactions = []
+        try:
+            cursor.execute("SELECT COALESCE(loyalty_points, 0) FROM users WHERE id = ?", (session['user_id'],))
+            lp_row = cursor.fetchone()
+            loyalty_points = int(lp_row[0]) if lp_row else 0
+
+            cursor.execute("""
+                SELECT lt.points, lt.type, lt.description, lt.created_at,
+                       o.order_number
+                FROM loyalty_transactions lt
+                LEFT JOIN orders o ON lt.order_id = o.id
+                WHERE lt.user_id = ?
+                ORDER BY lt.created_at DESC LIMIT 30
+            """, (session['user_id'],))
+            lt_raw = cursor.fetchall()
+            for row in (lt_raw or []):
+                loyalty_transactions.append({
+                    'points':       row[0],
+                    'type':         row[1],
+                    'description':  row[2],
+                    'created_at':   str(row[3])[:10] if row[3] else '',
+                    'order_number': row[4] or '',
+                })
+        except Exception:
+            pass
+
         return render_template('auth/dashboard.html',
                                user=user,
                                order_stats=order_stats,
                                orders=orders,
                                wishlist_items=wishlist_items,
+                               loyalty_points=loyalty_points,
+                               loyalty_transactions=loyalty_transactions,
                                active_tab=tab,
                                lang=lang)
     except Exception as e:

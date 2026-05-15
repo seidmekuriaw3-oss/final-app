@@ -346,6 +346,19 @@ def init_db():
     cur.execute("ALTER TABLE advertisements ADD COLUMN IF NOT EXISTS media_url TEXT")
     cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name TEXT")
     cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_email TEXT")
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS loyalty_points INTEGER DEFAULT 0")
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS loyalty_transactions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            order_id INTEGER,
+            points INTEGER NOT NULL,
+            type TEXT NOT NULL,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
 
     cur.execute("CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_products_featured ON products(is_featured)")

@@ -629,6 +629,12 @@
             <button class="db-nav-item" id="snav-settings" onclick="switchPanel('settings')">
                 <span class="db-nav-icon">⚙️</span> Settings
             </button>
+            <button class="db-nav-item" id="snav-rewards" onclick="switchPanel('rewards')" style="position:relative;">
+                <span class="db-nav-icon">🏆</span> Rewards
+                {% if loyalty_points > 0 %}
+                <span style="margin-left:auto;background:#f59e0b;color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;">{{ loyalty_points }} pts</span>
+                {% endif %}
+            </button>
             <div class="db-nav-divider"></div>
             <a class="db-nav-item" href="{{ url_for('cart.view_cart') }}">
                 <span class="db-nav-icon">🛒</span> My Cart
@@ -667,6 +673,9 @@
         </button>
         <button class="db-tab-btn" id="mnav-settings" onclick="switchPanel('settings')">
             <span class="tab-icon">⚙️</span>Settings
+        </button>
+        <button class="db-tab-btn" id="mnav-rewards" onclick="switchPanel('rewards')">
+            <span class="tab-icon">🏆</span>Rewards
         </button>
     </div>
 
@@ -725,6 +734,10 @@
             <a class="qa-card" href="javascript:void(0)" onclick="switchPanel('track')">
                 <div class="qa-icon">🔍</div>
                 <div class="qa-label">Track Order</div>
+            </a>
+            <a class="qa-card" href="javascript:void(0)" onclick="switchPanel('rewards')">
+                <div class="qa-icon">🏆</div>
+                <div class="qa-label">Rewards <span style="background:#f59e0b;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:20px;vertical-align:middle;">{{ loyalty_points|default(0)|int }} pts</span></div>
             </a>
         </div>
 
@@ -1144,6 +1157,120 @@
         </div>
     </div>
 
+    <!-- ══════════════════════════════════════
+         PANEL 7: REWARDS
+    ══════════════════════════════════════ -->
+    <div class="db-panel" id="panel-rewards">
+        <div class="section-head">
+            <h2 class="section-title">🏆 Loyalty Rewards</h2>
+        </div>
+
+        <!-- Points Hero Card -->
+        {% set pts = loyalty_points|default(0)|int %}
+        {% if pts < 50 %}{% set tier = 'Bronze' %}{% set tier_icon = '🥉' %}{% set tier_color = '#cd7f32' %}{% set next_tier = 50 %}{% set next_name = 'Silver' %}
+        {% elif pts < 200 %}{% set tier = 'Silver' %}{% set tier_icon = '🥈' %}{% set tier_color = '#9e9e9e' %}{% set next_tier = 200 %}{% set next_name = 'Gold' %}
+        {% elif pts < 500 %}{% set tier = 'Gold' %}{% set tier_icon = '🥇' %}{% set tier_color = '#f59e0b' %}{% set next_tier = 500 %}{% set next_name = 'Platinum' %}
+        {% else %}{% set tier = 'Platinum' %}{% set tier_icon = '💎' %}{% set tier_color = '#7c3aed' %}{% set next_tier = pts %}{% set next_name = '' %}{% endif %}
+
+        <div style="background:linear-gradient(135deg,#0f2a6e 0%,#1a73e8 60%,#1565c0 100%);border-radius:22px;padding:28px 24px;color:#fff;margin-bottom:22px;position:relative;overflow:hidden;">
+            <div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;background:rgba(255,255,255,0.07);border-radius:50%;"></div>
+            <div style="position:absolute;bottom:-20px;left:60px;width:80px;height:80px;background:rgba(255,255,255,0.05);border-radius:50%;"></div>
+            <div style="display:flex;align-items:center;gap:14px;position:relative;z-index:1;">
+                <div style="font-size:48px;line-height:1;">{{ tier_icon }}</div>
+                <div>
+                    <div style="font-size:11px;font-weight:700;letter-spacing:1px;opacity:0.75;text-transform:uppercase;">Your Tier</div>
+                    <div style="font-size:22px;font-weight:900;">{{ tier }} Member</div>
+                </div>
+                <div style="margin-left:auto;text-align:right;">
+                    <div style="font-size:11px;font-weight:700;opacity:0.75;text-transform:uppercase;">Points Balance</div>
+                    <div style="font-size:38px;font-weight:900;line-height:1;">{{ pts }}</div>
+                    <div style="font-size:12px;opacity:0.75;">pts</div>
+                </div>
+            </div>
+            {% if next_name %}
+            <div style="margin-top:18px;position:relative;z-index:1;">
+                <div style="display:flex;justify-content:space-between;font-size:11px;opacity:0.8;margin-bottom:5px;">
+                    <span>{{ pts }} pts</span>
+                    <span>{{ next_tier }} pts → {{ next_name }}</span>
+                </div>
+                <div style="background:rgba(255,255,255,0.2);border-radius:10px;height:8px;overflow:hidden;">
+                    <div style="background:#fff;height:100%;border-radius:10px;width:{{ [((pts / next_tier) * 100)|int, 100]|min }}%;transition:width 0.5s;"></div>
+                </div>
+                <div style="font-size:11px;opacity:0.75;margin-top:5px;">{{ next_tier - pts }} more points to reach {{ next_name }}</div>
+            </div>
+            {% else %}
+            <div style="margin-top:14px;font-size:13px;opacity:0.85;font-weight:600;position:relative;z-index:1;">🎉 You've reached the highest tier — Platinum!</div>
+            {% endif %}
+        </div>
+
+        <!-- How to Earn -->
+        <div class="recent-section" style="margin-bottom:18px;">
+            <div class="section-head" style="margin-bottom:14px;">
+                <h3 class="section-title" style="font-size:15px;">💡 How to Earn Points</h3>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
+                <div style="background:#e8f5e9;border-radius:14px;padding:16px;text-align:center;">
+                    <div style="font-size:28px;margin-bottom:6px;">🛍️</div>
+                    <div style="font-weight:800;color:#2e7d32;font-size:13px;">1 pt / 100 ETB</div>
+                    <div style="font-size:11px;color:#666;margin-top:3px;">Earned on every delivered order</div>
+                </div>
+                <div style="background:#e8f0fe;border-radius:14px;padding:16px;text-align:center;">
+                    <div style="font-size:28px;margin-bottom:6px;">🥈</div>
+                    <div style="font-weight:800;color:#1a73e8;font-size:13px;">50 pts = Silver</div>
+                    <div style="font-size:11px;color:#666;margin-top:3px;">Unlock Silver tier benefits</div>
+                </div>
+                <div style="background:#fff8e1;border-radius:14px;padding:16px;text-align:center;">
+                    <div style="font-size:28px;margin-bottom:6px;">🥇</div>
+                    <div style="font-weight:800;color:#d97706;font-size:13px;">200 pts = Gold</div>
+                    <div style="font-size:11px;color:#666;margin-top:3px;">Unlock Gold tier benefits</div>
+                </div>
+                <div style="background:#f3e8ff;border-radius:14px;padding:16px;text-align:center;">
+                    <div style="font-size:28px;margin-bottom:6px;">💎</div>
+                    <div style="font-weight:800;color:#7c3aed;font-size:13px;">500 pts = Platinum</div>
+                    <div style="font-size:11px;color:#666;margin-top:3px;">Unlock Platinum tier benefits</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Points History -->
+        <div class="recent-section">
+            <div class="section-head" style="margin-bottom:14px;">
+                <h3 class="section-title" style="font-size:15px;">📋 Points History</h3>
+            </div>
+            {% if loyalty_transactions %}
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                {% for tx in loyalty_transactions %}
+                <div style="display:flex;align-items:center;gap:14px;background:{% if tx.type=='earn' %}#e8f5e9{% else %}#fff3e0{% endif %};border-radius:14px;padding:14px 16px;">
+                    <div style="font-size:24px;flex-shrink:0;">{% if tx.type=='earn' %}⬆️{% else %}⬇️{% endif %}</div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                            {{ tx.description or ('Points earned' if tx.type=='earn' else 'Points used') }}
+                        </div>
+                        {% if tx.order_number %}
+                        <div style="font-size:11px;color:#888;margin-top:2px;">Order #{{ tx.order_number }}</div>
+                        {% endif %}
+                        <div style="font-size:11px;color:#aaa;margin-top:2px;">{{ tx.created_at }}</div>
+                    </div>
+                    <div style="font-size:18px;font-weight:900;flex-shrink:0;color:{% if tx.type=='earn' %}#2e7d32{% else %}#d97706{% endif %};">
+                        {% if tx.type=='earn' %}+{% else %}-{% endif %}{{ tx.points }} pts
+                    </div>
+                </div>
+                {% endfor %}
+                </div>
+            {% else %}
+                <div style="text-align:center;padding:40px 20px;color:#aaa;">
+                    <div style="font-size:50px;margin-bottom:12px;">🏆</div>
+                    <div style="font-weight:700;font-size:15px;color:#666;margin-bottom:6px;">No points yet</div>
+                    <div style="font-size:13px;">Complete your first order to start earning loyalty points!</div>
+                    <a href="{{ url_for('customer.products') }}"
+                       style="display:inline-block;margin-top:16px;background:#1a73e8;color:#fff;padding:12px 28px;border-radius:12px;font-weight:700;text-decoration:none;">
+                        🛍️ Shop Now
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
 </main>
 </div>
 
@@ -1151,7 +1278,7 @@
 /* ═══════════════════════════════════════════════
    PANEL SWITCHING
 ═══════════════════════════════════════════════ */
-const PANELS = ['overview','orders','wishlist','track','profile','settings'];
+const PANELS = ['overview','orders','wishlist','track','profile','settings','rewards'];
 
 function switchPanel(name) {
     PANELS.forEach(p => {
