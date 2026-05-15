@@ -1649,17 +1649,49 @@ function escapeHtmlDb(text) {
     return div.innerHTML;
 }
 
+// Auto-refresh notifications panel every 15 s while it is open
+let _notifPollTimer = null;
+
+function startNotifPoll() {
+    if (_notifPollTimer) return;
+    _notifPollTimer = setInterval(loadNotifications, 15000);
+}
+
+function stopNotifPoll() {
+    if (_notifPollTimer) { clearInterval(_notifPollTimer); _notifPollTimer = null; }
+}
+
 // Load notifs when notifs panel is opened — patch after declaration
 document.addEventListener('DOMContentLoaded', function() {
     const _orig = window.switchPanel || switchPanel;
     window.switchPanel = function(name) {
         _orig(name);
-        if (name === 'notifs') loadNotifications();
+        if (name === 'notifs') {
+            loadNotifications();
+            startNotifPoll();
+        } else {
+            stopNotifPoll();
+        }
     };
-    // If the page URL already requests notifs tab, load now
+    // If the page URL already requests notifs tab, load now and start polling
     if (new URLSearchParams(location.search).get('tab') === 'notifs') {
         loadNotifications();
+        startNotifPoll();
     }
+
+    // Stop polling when user leaves the page
+    window.addEventListener('beforeunload', stopNotifPoll);
+
+    // Pause/resume polling based on tab visibility
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') {
+            if (_notifPollTimer !== null) { stopNotifPoll(); startNotifPoll(); }
+            const tab = new URLSearchParams(location.search).get('tab');
+            if (tab === 'notifs') loadNotifications();
+        } else {
+            stopNotifPoll();
+        }
+    });
 });
 
 /* ═══════════════════════════════════════════════

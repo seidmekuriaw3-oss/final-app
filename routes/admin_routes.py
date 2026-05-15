@@ -867,11 +867,12 @@ def order_update_status(oid):
         conn = get_db()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT status, user_id, total FROM orders WHERE id = ?", (oid,))
+        cursor.execute("SELECT status, user_id, total, order_number FROM orders WHERE id = ?", (oid,))
         prev = cursor.fetchone()
-        prev_status = prev[0] if prev else None
-        user_id = prev[1] if prev else None
-        order_total = float(prev[2]) if prev and prev[2] else 0
+        prev_status   = prev[0] if prev else None
+        user_id       = prev[1] if prev else None
+        order_total   = float(prev[2]) if prev and prev[2] else 0
+        order_number  = prev[3] if prev else str(oid)
 
         cursor.execute("UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                        (status, oid))
@@ -907,10 +908,10 @@ def order_update_status(oid):
                 msg  = status_msgs.get(status, f'Order status updated to {status}.')
                 notify_user(
                     user_id,
-                    f'{icon} Order #{oid} — {status.title()}',
+                    f'{icon} Order #{order_number} — {status.title()}',
                     msg,
                     type='order',
-                    link=f'/orders/{oid}'
+                    link=f'/track-order/{order_number}'
                 )
             except Exception:
                 pass
