@@ -656,15 +656,17 @@ def ad_create():
             image.save(os.path.join(upload_dir, unique_filename))
             image_filename = f'uploads/ads/{unique_filename}'
 
+        media_url = request.form.get('media_url', '').strip()
+
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO advertisements (
                 title, title_am, title_ar, description, description_am, description_ar,
-                image, link, sort_order, is_active
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                image, media_url, link, sort_order, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
         """, (title, title_am, title_ar, description, description_am, description_ar,
-              image_filename, link, sort_order))
+              image_filename, media_url, link, sort_order))
         conn.commit()
         flash('Advertisement created successfully!', 'success')
         return redirect(url_for('admin.ads'))
@@ -706,13 +708,15 @@ def ad_edit(aid):
             image.save(os.path.join(upload_dir, unique_filename))
             image_filename = f'uploads/ads/{unique_filename}'
 
+        media_url = request.form.get('media_url', ad.get('media_url', '') or '').strip()
+
         cursor.execute("""
             UPDATE advertisements SET
                 title=?, title_am=?, title_ar=?, description=?, description_am=?, description_ar=?,
-                image=?, link=?, sort_order=?
+                image=?, media_url=?, link=?, sort_order=?
             WHERE id=?
         """, (title, title_am, title_ar, description, description_am, description_ar,
-              image_filename, link, sort_order, aid))
+              image_filename, media_url, link, sort_order, aid))
         conn.commit()
         flash('Advertisement updated successfully!', 'success')
         return redirect(url_for('admin.ads'))

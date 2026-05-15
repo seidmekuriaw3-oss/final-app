@@ -101,18 +101,16 @@
         line-height: 1.5; max-width: 280px;
     }
 
-    /* ── SHOW/HIDE: slider on mobile, grid on desktop ── */
-    .ads-mobile-only  { display: block; }
-    .ads-desktop-grid { display: none; }
-
-    @media (min-width: 769px) {
-        .ads-mobile-only  { display: none; }
-        .ads-desktop-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-            margin: 20px 0;
-        }
+    /* ── ADS SHOW/HIDE (ID selectors = highest CSS specificity, beat all class rules) ── */
+    #adsMobileSlider { display: none !important; }        /* hidden on desktop by default */
+    #adsDesktopGrid  { display: grid !important;          /* visible on desktop by default */
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+        margin: 20px 0;
+    }
+    @media (max-width: 768px) {
+        #adsMobileSlider { display: block !important; }   /* show slider on mobile */
+        #adsDesktopGrid  { display: none  !important; }   /* hide grid on mobile */
     }
 
     /* ── DESKTOP GRID CARDS ── */
@@ -375,21 +373,23 @@
 {% if ads %}
 
 {# ── MOBILE: standard slider carousel (hidden on desktop) ── #}
-<div class="slider-container ads-mobile-only">
+<div id="adsMobileSlider" class="slider-container">
     <button class="slider-btn slider-prev">❮</button>
     <div class="slider-wrapper">
         <div class="slider-track">
             {% for ad in ads %}
-            {% set is_video = ad.image and ad.image|trim != '' and ad.image.lower().endswith(('.mp4', '.webm', '.mov', '.avi', '.ogg')) %}
+            {% set vid_exts = ('.mp4', '.webm', '.mov', '.avi', '.ogg') %}
+            {% set is_video = (ad.image and ad.image|trim != '' and ad.image.lower().endswith(vid_exts)) or (ad.media_url and ad.media_url|trim != '' and ad.media_url.lower().endswith(vid_exts)) %}
+            {% set video_src = (url_for('static', filename=ad.image) if (ad.image and ad.image|trim != '' and ad.image.lower().endswith(vid_exts)) else ad.media_url) if is_video else '' %}
             {% set is_image = ad.image and ad.image|trim != '' and not is_video %}
             <div class="slider-slide {% if is_video %}has-video{% elif is_image %}has-image{% endif %}"
                  {% if is_image %}style="background-image: url('{{ url_for('static', filename=ad.image) }}');"{% endif %}>
                 {% if is_video %}
                 <div class="ad-video-col">
-                    <video src="{{ url_for('static', filename=ad.image) }}"
+                    <video src="{{ video_src }}"
                            autoplay muted loop playsinline
                            style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;"></video>
-                    <div class="video-click-zone" onclick="playFullscreen('{{ url_for('static', filename=ad.image) }}')" title="Click to watch fullscreen">
+                    <div class="video-click-zone" onclick="playFullscreen('{{ video_src }}')" title="Click to watch fullscreen">
                         <div class="video-play-btn">▶</div>
                     </div>
                 </div>
@@ -414,9 +414,11 @@
 </div>
 
 {# ── DESKTOP: independent 2-column grid (hidden on mobile) ── #}
-<div class="ads-desktop-grid">
+<div id="adsDesktopGrid" class="ads-desktop-grid">
     {% for ad in ads %}
-    {% set is_video = ad.image and ad.image|trim != '' and ad.image.lower().endswith(('.mp4', '.webm', '.mov', '.avi', '.ogg')) %}
+    {% set vid_exts = ('.mp4', '.webm', '.mov', '.avi', '.ogg') %}
+    {% set is_video = (ad.image and ad.image|trim != '' and ad.image.lower().endswith(vid_exts)) or (ad.media_url and ad.media_url|trim != '' and ad.media_url.lower().endswith(vid_exts)) %}
+    {% set video_src = (url_for('static', filename=ad.image) if (ad.image and ad.image|trim != '' and ad.image.lower().endswith(vid_exts)) else ad.media_url) if is_video else '' %}
     {% set is_image = ad.image and ad.image|trim != '' and not is_video %}
 
     {% if is_video %}
@@ -425,10 +427,10 @@
         <div class="adg-video-side">
             <video autoplay muted loop playsinline
                    style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;">
-                <source src="{{ url_for('static', filename=ad.image) }}" type="video/mp4">
-                <source src="{{ url_for('static', filename=ad.image) }}" type="video/webm">
+                <source src="{{ video_src }}" type="video/mp4">
+                <source src="{{ video_src }}" type="video/webm">
             </video>
-            <div class="adg-play-zone" onclick="playFullscreen('{{ url_for('static', filename=ad.image) }}')" title="Click to watch fullscreen">
+            <div class="adg-play-zone" onclick="playFullscreen('{{ video_src }}')" title="Click to watch fullscreen">
                 <div class="adg-play-btn">▶</div>
             </div>
         </div>
