@@ -1,0 +1,482 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.name_am }} - Ethiosadat Furniture{% endblock %}
+
+{% block extra_css %}
+<style>
+    .product-detail-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    .product-gallery {
+        background: var(--bg-white, white);
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+    .main-image {
+        width: 100%;
+        height: 400px;
+        background: var(--bg-hover, #f8f9fa);
+        border-radius: 16px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .main-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.3s;
+    }
+    .main-image img:hover {
+        transform: scale(1.02);
+    }
+    .product-info {
+        background: var(--bg-white, white);
+        border-radius: 20px;
+        padding: 28px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+    .product-title {
+        font-size: 28px;
+        margin: 0 0 8px 0;
+        color: var(--text-color, #333);
+    }
+    .product-name-en {
+        color: var(--text-muted, #666);
+        font-size: 14px;
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--border-color, #eee);
+    }
+    .product-price {
+        margin: 20px 0;
+    }
+    .current-price {
+        font-size: 32px;
+        font-weight: bold;
+        color: #1a73e8;
+    }
+    .old-price {
+        text-decoration: line-through;
+        color: var(--text-muted, #999);
+        font-size: 18px;
+        margin-left: 12px;
+    }
+    .discount-badge {
+        display: inline-block;
+        background: #f44336;
+        color: white;
+        padding: 4px 12px;
+        border-radius: 30px;
+        font-size: 14px;
+        margin-left: 12px;
+    }
+    .stock-status {
+        margin: 16px 0;
+        padding: 12px;
+        border-radius: 12px;
+    }
+    .in-stock {
+        background: #e8f5e9;
+        color: #4caf50;
+    }
+    .low-stock {
+        background: #fff3e0;
+        color: #ff9800;
+    }
+    .out-of-stock {
+        background: #ffebee;
+        color: #f44336;
+    }
+    .quantity-selector {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin: 24px 0;
+    }
+    .quantity-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--bg-hover, #f0f0f0);
+        border: none;
+        font-size: 20px;
+        cursor: pointer;
+        transition: all 0.2s;
+        color: var(--text-color, #333);
+    }
+    .quantity-btn:hover {
+        background: #1a73e8;
+        color: white;
+    }
+    .quantity-input {
+        width: 70px;
+        text-align: center;
+        padding: 10px;
+        border: 1px solid var(--border-color, #ddd);
+        border-radius: 8px;
+        font-size: 16px;
+        background: var(--bg-white, white);
+        color: var(--text-color, #333);
+    }
+    .action-buttons {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+        flex-wrap: wrap;
+    }
+    .btn-add-to-cart {
+        flex: 1;
+        padding: 14px;
+        font-size: 16px;
+    }
+    .product-description {
+        margin-top: 30px;
+        background: var(--bg-white, white);
+        border-radius: 20px;
+        padding: 24px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+    .product-description h3 {
+        margin-top: 0;
+        margin-bottom: 16px;
+        color: #1a73e8;
+    }
+    .product-description p {
+        color: var(--text-muted, #555);
+        line-height: 1.8;
+    }
+    .features-list {
+        list-style: none;
+        padding: 0;
+        margin-top: 20px;
+    }
+    .features-list li {
+        padding: 6px 0;
+        color: var(--text-muted, #555);
+    }
+    .related-products {
+        margin-top: 40px;
+    }
+    .related-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+    }
+    .related-card {
+        background: var(--bg-white, white);
+        border-radius: 16px;
+        overflow: hidden;
+        cursor: pointer;
+        transition: all 0.3s;
+        text-align: center;
+        padding: 16px;
+    }
+    .related-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+    }
+    .related-image {
+        height: 150px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-hover, #f8f9fa);
+        border-radius: 12px;
+        margin-bottom: 12px;
+    }
+    .related-image img {
+        max-width: 100%;
+        max-height: 120px;
+        object-fit: cover;
+    }
+    .related-name {
+        font-weight: 500;
+        margin: 8px 0;
+        color: var(--text-color, #333);
+    }
+    .related-price {
+        color: #1a73e8;
+        font-weight: bold;
+    }
+    
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+        .features-list li {
+            color: #aaa;
+        }
+        .product-description p {
+            color: #aaa;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .product-detail-container {
+            padding: 15px;
+        }
+        .product-detail-grid {
+            grid-template-columns: 1fr !important;
+            gap: 20px !important;
+        }
+        .main-image {
+            height: 300px;
+        }
+        .product-title {
+            font-size: 24px;
+        }
+        .current-price {
+            font-size: 28px;
+        }
+        .action-buttons {
+            flex-direction: column;
+        }
+        .related-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+    @media (max-width: 480px) {
+        .product-info {
+            padding: 20px;
+        }
+        .main-image {
+            height: 250px;
+        }
+        .quantity-selector {
+            justify-content: center;
+        }
+        .related-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="product-detail-container">
+    
+    <div class="product-detail-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+        
+        <!-- Product Gallery -->
+        <div class="product-gallery">
+            <div class="main-image">
+                {% if product.thumbnail and product.thumbnail|trim != '' and product.thumbnail != 'None' %}
+                    <img src="{{ url_for('static', filename=product.thumbnail) }}" alt="{{ product.name_am }}" id="mainProductImage"
+                         onerror="this.onerror=null; this.parentElement.innerHTML='<div style=\'font-size:64px;\'>🪑</div>'">
+                {% else %}
+                    <div style="font-size: 64px;">🪑</div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Product Info -->
+        <div class="product-info">
+            <h1 class="product-title">{{ product.name_am }}</h1>
+            <div class="product-name-en">{{ product.name }}</div>
+            
+            <!-- Price -->
+            <div class="product-price">
+                <span class="current-price">{{ format_price(product.price) }}</span>
+                {% if product.compare_price and product.compare_price|float > product.price|float %}
+                    <span class="old-price">{{ format_price(product.compare_price) }}</span>
+                    {% set discount = ((product.compare_price|float - product.price|float) / product.compare_price|float * 100)|round|int %}
+                    <span class="discount-badge">-{{ discount }}%</span>
+                {% endif %}
+            </div>
+            
+            <!-- Discount for logged in users -->
+            {% if is_logged_in %}
+            <div style="margin: 10px 0; padding: 8px 12px; background: #e8f5e9; border-radius: 10px; color: #4caf50; font-size: 14px;">
+                🎉 10% discount applied for members! Final price: {{ format_price(final_price) }}
+            </div>
+            {% endif %}
+            
+            <!-- Stock Status -->
+            {% set stock = product.stock_quantity|default(0) %}
+            <div class="stock-status 
+                {% if stock > 10 %}in-stock
+                {% elif stock > 0 %}low-stock
+                {% else %}out-of-stock{% endif %}">
+                {% if stock > 10 %}
+                    ✅ In Stock ({{ stock }} available)
+                {% elif stock > 0 %}
+                    ⚠️ Only {{ stock }} left in stock - Order soon!
+                {% else %}
+                    ❌ Out of Stock
+                {% endif %}
+            </div>
+            
+            <!-- Material & Color Info -->
+            <div style="margin: 16px 0; display: flex; gap: 20px; flex-wrap: wrap;">
+                {% if product.material %}
+                <div><strong>Material:</strong> {{ product.material }}</div>
+                {% endif %}
+                {% if product.color %}
+                <div><strong>Color:</strong> {{ product.color }}</div>
+                {% endif %}
+            </div>
+            
+            <!-- Quantity Selector -->
+            <div class="quantity-selector">
+                <span style="font-weight: 500;">Quantity:</span>
+                <button class="quantity-btn" onclick="decrementQuantity()">-</button>
+                <input type="number" id="quantityInput" class="quantity-input" value="1" min="1" {% if stock == 0 %}disabled{% endif %}>
+                <button class="quantity-btn" onclick="incrementQuantity()">+</button>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <button onclick="addToCartFromDetail()" 
+                        id="addToCartBtn"
+                        class="btn btn-primary btn-add-to-cart"
+                        {% if stock == 0 %}disabled{% endif %}>
+                    🛒 Add to Cart
+                </button>
+                <a href="{{ url_for('customer.products') }}" class="btn btn-outline">← Continue Shopping</a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Product Description -->
+    <div class="product-description">
+        <h3>📝 Product Description</h3>
+        <p>
+            {% if product.description_am and product.description_am|trim != '' %}
+                {{ product.description_am }}
+            {% elif product.description and product.description|trim != '' %}
+                {{ product.description }}
+            {% else %}
+                No description available for this product. Please contact us for more information.
+            {% endif %}
+        </p>
+        
+        <!-- Product Features -->
+        <div style="margin-top: 20px;">
+            <h4>✨ Features:</h4>
+            <ul class="features-list">
+                <li>✓ High-quality materials</li>
+                <li>✓ Modern design</li>
+                <li>✓ Durable construction</li>
+                <li>✓ Easy to clean</li>
+            </ul>
+        </div>
+        
+        <!-- Dimensions & Weight -->
+        {% if product.dimensions or product.weight %}
+        <div style="margin-top: 20px;">
+            <h4>📏 Specifications:</h4>
+            <ul class="features-list">
+                {% if product.dimensions %}
+                <li>✓ Dimensions: {{ product.dimensions }}</li>
+                {% endif %}
+                {% if product.weight %}
+                <li>✓ Weight: {{ product.weight }} kg</li>
+                {% endif %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Related Products -->
+    {% if related_products and related_products|length > 0 %}
+    <div class="related-products">
+        <h2>🔗 You May Also Like</h2>
+        <div class="related-grid">
+            {% for related in related_products %}
+            <div class="related-card" onclick="location.href='{{ url_for('customer.product_detail', product_id=related.id) }}'">
+                <div class="related-image">
+                    {% if related.thumbnail and related.thumbnail|trim != '' and related.thumbnail != 'None' %}
+                        <img src="{{ url_for('static', filename=related.thumbnail) }}" alt="{{ related.name_am }}" loading="lazy"
+                             onerror="this.onerror=null; this.parentElement.innerHTML='<div style=\'font-size:32px;\'>🪑</div>'">
+                    {% else %}
+                        <div style="font-size: 32px;">🪑</div>
+                    {% endif %}
+                </div>
+                <div class="related-name">{{ related.name_am }}</div>
+                <div class="related-price">{{ format_price(related.price) }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    let currentQuantity = 1;
+    const maxStock = {{ product.stock_quantity|default(0) }};
+    const productId = '{{ product.id }}';
+    const productName = '{{ product.name_am }}';
+    const productPrice = {{ product.price }};
+    const finalPrice = {{ final_price|default(product.price) }};
+    const productImage = '{{ product.thumbnail if product.thumbnail else '' }}';
+    
+    function incrementQuantity() {
+        if (maxStock > 0 && currentQuantity < maxStock) {
+            currentQuantity++;
+            const quantityInput = document.getElementById('quantityInput');
+            if (quantityInput) quantityInput.value = currentQuantity;
+        } else if (maxStock === 0) {
+            if (window.showToast) window.showToast('Product is out of stock', 'warning');
+        } else {
+            if (window.showToast) window.showToast('Maximum quantity reached', 'warning');
+        }
+    }
+    
+    function decrementQuantity() {
+        if (currentQuantity > 1) {
+            currentQuantity--;
+            const quantityInput = document.getElementById('quantityInput');
+            if (quantityInput) quantityInput.value = currentQuantity;
+        }
+    }
+    
+    const quantityInput = document.getElementById('quantityInput');
+    if (quantityInput) {
+        quantityInput.addEventListener('change', function() {
+            let val = parseInt(this.value);
+            if (isNaN(val) || val < 1) val = 1;
+            if (maxStock > 0 && val > maxStock) {
+                val = maxStock;
+                if (window.showToast) window.showToast(`Only ${maxStock} items available`, 'warning');
+            }
+            currentQuantity = val;
+            this.value = val;
+        });
+    }
+    
+    function addToCartFromDetail() {
+        if (maxStock === 0) {
+            if (window.showToast) window.showToast('Product is out of stock', 'error');
+            return;
+        }
+        
+        const btn = document.getElementById('addToCartBtn');
+        const originalText = btn ? btn.innerHTML : '';
+        
+        if (btn) {
+            btn.innerHTML = '⏳ Adding...';
+            btn.disabled = true;
+        }
+        
+        if (window.addToCart) {
+            window.addToCart(productId, currentQuantity, btn);
+        }
+        
+        setTimeout(() => {
+            if (btn) {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }, 1000);
+    }
+    
+    // Make functions globally available
+    window.incrementQuantity = incrementQuantity;
+    window.decrementQuantity = decrementQuantity;
+    window.addToCartFromDetail = addToCartFromDetail;
+</script>
+{% endblock %}

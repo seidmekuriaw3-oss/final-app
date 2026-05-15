@@ -1,0 +1,493 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Ethiosadat Furniture{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/slider.css') }}">
+<style>
+    /* Fullscreen video styles */
+    .fullscreen-video {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: black;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .fullscreen-video video {
+        width: 100%;
+        height: auto;
+        max-height: 100%;
+    }
+    .close-fullscreen {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: white;
+        color: black;
+        border: none;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        font-size: 24px;
+        cursor: pointer;
+        z-index: 10000;
+    }
+    /* Slide background video - full fill, behind content */
+    .slide-bg-video {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        z-index: 0;
+        pointer-events: none;
+        cursor: pointer;
+    }
+    /* Light overlay so video remains clearly visible */
+    .slider-slide.has-video::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.25);
+        z-index: 1;
+        border-radius: inherit;
+        pointer-events: none;
+    }
+    /* Keep content above video and overlay, pinned to bottom */
+    .slider-slide.has-video .slide-content {
+        position: absolute;
+        bottom: 20px;
+        left: 0;
+        right: 0;
+        z-index: 3;
+        padding: 0 30px;
+        text-align: center;
+    }
+    /* Clickable play zone covering the full slide */
+    .video-click-zone {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    /* Play button overlay */
+    .video-play-btn {
+        width: 70px;
+        height: 70px;
+        background: rgba(255, 255, 255, 0.25);
+        border: 3px solid rgba(255, 255, 255, 0.85);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        color: white;
+        backdrop-filter: blur(4px);
+        transition: transform 0.2s ease, background 0.2s ease;
+        pointer-events: none;
+    }
+    .video-click-zone:hover .video-play-btn {
+        transform: scale(1.12);
+        background: rgba(255, 255, 255, 0.40);
+    }
+    /* Bottom text bar on video slides */
+    .slider-slide.has-video .slide-content h3,
+    .slider-slide.has-video .slide-content p {
+        text-shadow: 0 2px 6px rgba(0,0,0,0.7);
+    }
+    .slider-slide.has-video .slide-content {
+        background: rgba(0, 0, 0, 0.30);
+        border-radius: 12px;
+        padding: 14px 24px;
+        margin: 0 20px 20px;
+        backdrop-filter: blur(3px);
+    }
+    
+    /* Products Grid - Mobile: 2, Desktop: 6 */
+    .products-grid {
+        display: grid !important;
+        gap: 25px !important;
+        margin-top: 20px !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    
+    /* Tablet and Desktop: 6 columns */
+    @media (min-width: 768px) {
+        .products-grid {
+            grid-template-columns: repeat(6, 1fr) !important;
+        }
+    }
+    
+    /* About Section */
+    .about-section {
+        background: var(--bg-white, white);
+        border-radius: 20px;
+        padding: 40px;
+        margin: 40px 0;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    .about-section h2 {
+        color: var(--primary, #1a73e8);
+        margin-bottom: 20px;
+    }
+    .about-section p {
+        color: var(--text-muted, #666);
+        line-height: 1.6;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    
+    .hero {
+        background: linear-gradient(135deg, #1a73e8, #0d47a1);
+        color: white;
+        text-align: center;
+        padding: 60px 20px;
+        border-radius: 20px;
+        margin-bottom: 40px;
+    }
+    .hero h1 {
+        font-size: 2.5rem;
+        margin-bottom: 16px;
+    }
+    .hero p {
+        font-size: 1.1rem;
+        opacity: 0.9;
+    }
+    
+    .btn-outline {
+        padding: 8px 16px;
+        background: var(--bg-white, white);
+        border-radius: 25px;
+        text-decoration: none;
+        color: #1a73e8;
+        border: 1px solid #1a73e8;
+        transition: all 0.3s;
+    }
+    .btn-outline:hover {
+        background: #1a73e8;
+        color: white;
+        transform: translateY(-2px);
+    }
+    .product-card {
+        cursor: pointer;
+        background: var(--bg-white, white);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        transition: all 0.3s;
+        position: relative;
+    }
+    .product-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+    }
+    .btn-add-to-cart {
+        width: 100%;
+        background: #1a73e8;
+        color: white;
+        border: none;
+        padding: 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: all 0.3s;
+        position: relative;
+        z-index: 2;
+    }
+    .btn-add-to-cart:hover {
+        background: #0d47a1;
+        transform: scale(1.02);
+    }
+    .product-card .price-row {
+        position: relative;
+        z-index: 2;
+    }
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+        .product-card {
+            background: #1e1e2e;
+        }
+        .product-card h3 {
+            color: #eee !important;
+        }
+        .about-section {
+            background: #16213e;
+        }
+    }
+    /* Responsive */
+    @media (max-width: 768px) {
+        .hero {
+            padding: 40px 20px !important;
+        }
+        .hero h1 {
+            font-size: 24px !important;
+        }
+        .products-grid {
+            gap: 16px !important;
+        }
+        .about-section {
+            padding: 30px 20px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<div class="hero">
+    <h1>🪑 Ethiosadat Furniture</h1>
+    <p>{{ t.quality_tagline }}</p>
+    <p>{{ t.free_shipping_msg }}</p>
+</div>
+
+<!-- ==================== MODERN SLIDER CAROUSEL ==================== -->
+{% if ads %}
+<div class="slider-container">
+    <button class="slider-btn slider-prev">❮</button>
+    <div class="slider-wrapper">
+        <div class="slider-track">
+            {% for ad in ads %}
+            {% set is_video = ad.image and ad.image|trim != '' and ad.image.lower().endswith(('.mp4', '.webm', '.mov', '.avi', '.ogg')) %}
+            {% set is_image = ad.image and ad.image|trim != '' and not is_video %}
+            <div class="slider-slide {% if is_video %}has-video{% elif is_image %}has-image{% endif %}"
+                 {% if is_image %}style="background-image: url('{{ url_for('static', filename=ad.image) }}');"{% endif %}>
+                {% if is_video %}
+                <video class="slide-bg-video"
+                       src="{{ url_for('static', filename=ad.image) }}"
+                       autoplay muted loop playsinline></video>
+                <div class="video-click-zone" onclick="playFullscreen('{{ url_for('static', filename=ad.image) }}')" title="Click to watch fullscreen">
+                    <div class="video-play-btn">▶</div>
+                </div>
+                {% endif %}
+                <div class="slide-content">
+                    <h3>{{ localized_ad_title(ad) or '🎉 ' ~ t.promo }}</h3>
+                    <p>{{ localized_ad_description(ad) or t.quality_tagline }}</p>
+                    <a href="{{ ad.link if ad.link else url_for('customer.products') }}" class="slide-btn">{{ t.shop_now }}</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <button class="slider-btn slider-next">❯</button>
+    <div class="slider-dots"></div>
+</div>
+{% endif %}
+
+<!-- Categories -->
+<div style="margin-bottom: 30px;">
+    <h2>📂 {{ t.categories }}</h2>
+    <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px;">
+        <a href="{{ url_for('customer.products') }}" class="btn btn-outline">{{ t.all }}</a>
+        {% for cat in categories %}
+        <a href="{{ url_for('customer.products', category=cat.id) }}" class="btn btn-outline">
+            {% if cat.icon %}{{ cat.icon }}{% endif %} {{ category_name(cat) }}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Products Grid -->
+<h2>{{ t.featured_products }}</h2>
+<div class="products-grid">
+    {% for product in featured_products %}
+    <div class="product-card" data-product-id="{{ product.id }}">
+        <div style="height: 200px; background: var(--bg-hover, #f5f5f5); display: flex; align-items: center; justify-content: center; position: relative;">
+            {% if product.thumbnail and product.thumbnail != '' %}
+                <img src="{{ url_for('static', filename=product.thumbnail) }}" alt="{{ product_name(product) }}" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy"
+                     onerror="this.onerror=null; this.parentElement.innerHTML='<div style=\'font-size:64px;\'>🪑</div>'">
+            {% else %}
+                <div style="font-size: 64px;">🪑</div>
+            {% endif %}
+            {% if product.compare_price and product.compare_price|float > product.price|float %}
+                {% set discount = ((product.compare_price|float - product.price|float) / product.compare_price|float * 100)|round|int %}
+                <span style="position: absolute; top: 10px; right: 10px; background: #f44336; color: white; padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: bold;">
+                    -{{ discount }}%
+                </span>
+            {% endif %}
+            {% if product.is_new %}
+                <span style="position: absolute; top: 10px; left: 10px; background: #4caf50; color: white; padding: 5px 10px; border-radius: 20px; font-size: 11px; font-weight: bold;">
+                    🆕 NEW
+                </span>
+            {% endif %}
+        </div>
+        <div style="padding: 15px;">
+            <h3 style="font-size: 16px; margin-bottom: 5px; color: var(--text-color, #333);">{{ product_name(product) }}</h3>
+            <div class="price-row" style="margin: 10px 0;">
+                <span style="font-size: 20px; font-weight: bold; color: #1a73e8;">{{ format_price(product.price) }}</span>
+                {% if product.compare_price and product.compare_price|float > product.price|float %}
+                    <span style="text-decoration: line-through; color: var(--text-muted, #999); font-size: 14px; margin-left: 8px;">{{ format_price(product.compare_price) }}</span>
+                {% endif %}
+            </div>
+            <button onclick="event.stopPropagation(); addToCart('{{ product.id }}', 1, this)"
+                    class="btn-add-to-cart">
+                {{ t.add_to_cart }}
+            </button>
+            <a href="{{ url_for('customer.product_detail', product_id=product.id) }}" style="display: block; text-align: center; margin-top: 10px; color: var(--text-muted, #666); text-decoration: none; font-size: 14px; position: relative; z-index: 2;" onclick="event.stopPropagation();">{{ t.view_details }}</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- New Products Section -->
+{% if new_products and new_products|length > 0 %}
+<h2 style="margin-top: 40px;">{{ t.new_arrivals }}</h2>
+<div class="products-grid">
+    {% for product in new_products %}
+    <div class="product-card" data-product-id="{{ product.id }}">
+        <div style="height: 200px; background: var(--bg-hover, #f5f5f5); display: flex; align-items: center; justify-content: center; position: relative;">
+            {% if product.thumbnail and product.thumbnail != '' %}
+                <img src="{{ url_for('static', filename=product.thumbnail) }}" alt="{{ product_name(product) }}" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy"
+                     onerror="this.onerror=null; this.parentElement.innerHTML='<div style=\'font-size:64px;\'>🪑</div>'">
+            {% else %}
+                <div style="font-size: 64px;">🪑</div>
+            {% endif %}
+            {% if product.compare_price and product.compare_price|float > product.price|float %}
+                {% set discount = ((product.compare_price|float - product.price|float) / product.compare_price|float * 100)|round|int %}
+                <span style="position: absolute; top: 10px; right: 10px; background: #f44336; color: white; padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: bold;">
+                    -{{ discount }}%
+                </span>
+            {% endif %}
+            <span style="position: absolute; top: 10px; left: 10px; background: #4caf50; color: white; padding: 5px 10px; border-radius: 20px; font-size: 11px; font-weight: bold;">
+                🆕 NEW
+            </span>
+        </div>
+        <div style="padding: 15px;">
+            <h3 style="font-size: 16px; margin-bottom: 5px; color: var(--text-color, #333);">{{ product_name(product) }}</h3>
+            <div class="price-row" style="margin: 10px 0;">
+                <span style="font-size: 20px; font-weight: bold; color: #1a73e8;">{{ format_price(product.price) }}</span>
+                {% if product.compare_price and product.compare_price|float > product.price|float %}
+                    <span style="text-decoration: line-through; color: var(--text-muted, #999); font-size: 14px; margin-left: 8px;">{{ format_price(product.compare_price) }}</span>
+                {% endif %}
+            </div>
+            <button onclick="event.stopPropagation(); addToCart('{{ product.id }}', 1, this)"
+                    class="btn-add-to-cart">
+                {{ t.add_to_cart }}
+            </button>
+            <a href="{{ url_for('customer.product_detail', product_id=product.id) }}" style="display: block; text-align: center; margin-top: 10px; color: var(--text-muted, #666); text-decoration: none; font-size: 14px; position: relative; z-index: 2;" onclick="event.stopPropagation();">{{ t.view_details }}</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Recently Viewed Section -->
+{% if recently_viewed_products and recently_viewed_products|length > 0 %}
+<div style="margin-top: 40px;">
+    <h2 style="display:flex; align-items:center; gap:10px;">
+        🕐 {% if lang == 'am' %}የቅርብ ጊዜ ምርቶች{% elif lang == 'ar' %}المنتجات المشاهدة مؤخراً{% else %}Recently Viewed{% endif %}
+    </h2>
+    <div class="products-grid">
+        {% for product in recently_viewed_products %}
+        <div class="product-card" data-product-id="{{ product.id }}"
+             onclick="if(!event.target.closest('button') && !event.target.closest('a')) window.location.href='{{ url_for('customer.product_detail', product_id=product.id) }}'">
+            <div style="height: 200px; background: var(--bg-hover, #f5f5f5); display:flex; align-items:center; justify-content:center; position:relative;">
+                {% if product.thumbnail and product.thumbnail != '' %}
+                    <img src="{{ url_for('static', filename=product.thumbnail) }}" alt="{{ product_name(product) }}"
+                         style="width:100%; height:100%; object-fit:cover;" loading="lazy"
+                         onerror="this.onerror=null; this.parentElement.innerHTML='<div style=\'font-size:64px;\'>🪑</div>'">
+                {% else %}
+                    <div style="font-size:64px;">🪑</div>
+                {% endif %}
+                {% if product.compare_price and product.compare_price|float > product.price|float %}
+                    {% set discount = ((product.compare_price|float - product.price|float) / product.compare_price|float * 100)|round|int %}
+                    <span style="position:absolute; top:10px; right:10px; background:#f44336; color:white; padding:5px 10px; border-radius:20px; font-size:12px; font-weight:bold;">
+                        -{{ discount }}%
+                    </span>
+                {% endif %}
+            </div>
+            <div style="padding:15px;">
+                <h3 style="font-size:16px; margin-bottom:5px; color:var(--text-color,#333);">{{ product_name(product) }}</h3>
+                <div class="price-row" style="margin:10px 0;">
+                    <span style="font-size:20px; font-weight:bold; color:#1a73e8;">{{ format_price(product.price) }}</span>
+                    {% if product.compare_price and product.compare_price|float > product.price|float %}
+                        <span style="text-decoration:line-through; color:var(--text-muted,#999); font-size:14px; margin-left:8px;">{{ format_price(product.compare_price) }}</span>
+                    {% endif %}
+                </div>
+                <button onclick="event.stopPropagation(); addToCart('{{ product.id }}', 1, this)"
+                        class="btn-add-to-cart">
+                    {{ t.add_to_cart }}
+                </button>
+                <a href="{{ url_for('customer.product_detail', product_id=product.id) }}"
+                   style="display:block; text-align:center; margin-top:10px; color:var(--text-muted,#666); text-decoration:none; font-size:14px;"
+                   onclick="event.stopPropagation();">{{ t.view_details }}</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- About Section (Desktop only - shown based on platform) -->
+{% if show_about %}
+<div class="about-section">
+    <h2>🏢 About Ethiosadat Furniture</h2>
+    <p>
+        Ethiosadat Furniture is a leading furniture retailer in Ethiopia, offering high-quality 
+        furniture at competitive prices. With multiple branches across the country, we serve 
+        thousands of satisfied customers. Our mission is to provide comfortable, stylish, 
+        and durable furniture that transforms houses into homes.
+    </p>
+    <p style="margin-top: 15px;">
+        🇪🇹 Proudly serving Ethiopia since 2000 | 9 branches nationwide | Thousands of happy customers
+    </p>
+</div>
+{% endif %}
+
+<!-- Admin Link -->
+<div style="text-align: center; margin-top: 40px; padding: 20px;">
+    {% if not session.get('admin') and not session.get('is_admin') %}
+    <a href="{{ url_for('admin.admin_login') }}" style="display: inline-flex; align-items: center; gap: 8px; background: #1a1a2e; color: #d4af37; padding: 12px 24px; border-radius: 30px; text-decoration: none; font-weight: bold;">
+        👑 Admin Login
+    </a>
+    {% endif %}
+    {% if session.get('admin') or session.get('is_admin') %}
+    <a href="{{ url_for('admin.dashboard') }}" style="display: inline-flex; align-items: center; gap: 8px; background: #1a1a2e; color: #d4af37; padding: 12px 24px; border-radius: 30px; text-decoration: none; font-weight: bold;">
+        👑 Go to Admin Panel
+    </a>
+    {% endif %}
+</div>
+
+<script>
+    // Fullscreen video function
+    function playFullscreen(videoSrc) {
+        const fullscreenDiv = document.createElement('div');
+        fullscreenDiv.className = 'fullscreen-video';
+        fullscreenDiv.innerHTML = `
+            <button class="close-fullscreen" onclick="this.parentElement.remove()">✕</button>
+            <video src="${videoSrc}" autoplay controls style="width: 100%; height: auto; max-height: 100%;"></video>
+        `;
+        document.body.appendChild(fullscreenDiv);
+        
+        const video = fullscreenDiv.querySelector('video');
+        video.addEventListener('ended', () => fullscreenDiv.remove());
+    }
+    
+    // Product card click handler
+    document.querySelectorAll('.product-card').forEach(card => {
+        card.addEventListener('click', function(e) {
+            if (e.target.closest('.btn-add-to-cart') || e.target.closest('a')) {
+                return;
+            }
+            const link = this.querySelector('a[href^="/product/"]');
+            if (link) window.location.href = link.getAttribute('href');
+        });
+    });
+    
+    // Make playFullscreen globally available
+    window.playFullscreen = playFullscreen;
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/slider.js') }}"></script>
+{% endblock %}

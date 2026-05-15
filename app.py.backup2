@@ -1,0 +1,3345 @@
+# ==================== 1. 📦 IMPORT STATEMENTS ====================
+
+# ------------------------------------------------------------------
+# Standard Library Imports
+# ------------------------------------------------------------------
+import os
+import sys
+import json
+import uuid
+import logging
+import urllib.parse
+from datetime import datetime
+from functools import wraps
+
+# ------------------------------------------------------------------
+# Third Party Imports
+# ------------------------------------------------------------------
+from flask import Flask
+from flask import render_template
+from flask import request
+from flask import redirect
+from flask import url_for
+from flask import session
+from flask import flash
+from flask import jsonify
+from flask import send_from_directory
+from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# ------------------------------------------------------------------
+# Local Imports
+# ------------------------------------------------------------------
+from config import Config
+from database.db import get_db, init_db
+from database.models import Product, Ad, Order
+from utils.helpers import *
+from utils.validators import *
+from utils.file_handler import *
+from services.product_service import *
+from services.cart_service import *
+from services.order_service import *
+from services.whatsapp_service import *
+from middleware.auth import login_required, admin_required
+
+
+# ==================== 2. ⚙️ APP INITIALIZATION & CONFIGURATION ====================
+
+# ------------------------------------------------------------------
+# Flask App Initialization
+# ------------------------------------------------------------------
+app = Flask(__name__)
+
+# ------------------------------------------------------------------
+# Load Configuration from Config Class
+# ------------------------------------------------------------------
+app.config.from_object(Config)
+
+# ------------------------------------------------------------------
+# Secret Key Configuration
+# ------------------------------------------------------------------
+app.secret_key = os.environ.get('SECRET_KEY', 'ethiosadat_default_secret_key_2026')
+
+# ------------------------------------------------------------------
+# Upload Folder Configuration
+# ------------------------------------------------------------------
+UPLOAD_FOLDER = 'static/uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'webm', 'mov'}
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(os.path.join(UPLOAD_FOLDER, 'products'), exist_ok=True)
+os.makedirs(os.path.join(UPLOAD_FOLDER, 'ads'), exist_ok=True)
+
+# ------------------------------------------------------------------
+# Helper function to check allowed file extensions
+# ------------------------------------------------------------------
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    if not filename or '.' not in filename:
+        return False
+    return filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# ------------------------------------------------------------------
+# Database Initialization - Using config for DB path
+# ------------------------------------------------------------------
+def init_database():
+    """Initialize the database with required tables."""
+    import sqlite3
+    
+    db_path = Config.DATABASE_PATH if hasattr(Config, 'DATABASE_PATH') else 'ethiosadat.db'
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Products table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name_am TEXT NOT NULL,
+            name_en TEXT NOT NULL,
+            price TEXT NOT NULL,
+            old_price TEXT,
+            image TEXT,
+            category TEXT
+        )
+    ''')
+    
+    # Ads table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT NOT NULL,
+            media TEXT
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+    print("✅ Database initialized successfully")
+
+# Initialize database
+init_database()
+
+# ------------------------------------------------------------------
+# Logging Configuration
+# ------------------------------------------------------------------
+os.makedirs('logs', exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+file_handler = logging.FileHandler('logs/app.log')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+
+app.logger.addHandler(file_handler)
+
+app.logger.info("=" * 50)
+app.logger.info("🚀 Ethiosadat Application Started")
+app.logger.info("=" * 50)
+
+# ------------------------------------------------------------------
+# Application Variables
+# ------------------------------------------------------------------
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '1234')
+WHATSAPP_NUMBER = os.environ.get('WHATSAPP_NUMBER', '251906020606')
+
+
+# ==================== 3. 🌐 LANGUAGE / LOCALIZATION ====================
+
+# ------------------------------------------------------------------
+# Translation Texts Dictionary
+# ------------------------------------------------------------------
+TEXTS = {
+    'am': {
+        'search': 'እቃዎችን እዚህ ይፈልጉ...',
+        'all': 'ሁሉም',
+        'order_now': 'አሁን እዘዝ',
+        'about_us': 'ስለ እኛ',
+        'address': 'አድራሻ፦ አዲስ አበባ',
+        'promo': 'ልዩ ቅናሽ!',
+        'home': 'መነሻ',
+        'products': 'ምርቶች',
+        'contact': 'አግኙን',
+        'sofa': 'ሶፋ',
+        'bed': 'አልጋ',
+        'mejlis': 'መጅሊስ',
+        'curtain': 'መጋረጃ',
+        'wardrobe': 'ቁምሳጥን',
+        'admin_title': 'የአስተዳዳሪ ፓነል',
+        'products_manage': 'ምርቶች',
+        'add_product': 'ምርት ጨምር',
+        'ads_manage': 'ማስታወቂያዎች',
+        'cart': 'ጋሪ',
+        'account': 'አካውንት',
+        'checkout': 'ትዕዛዝ አስገባ',
+        'total': 'ጠቅላላ',
+        'subtotal': 'ንዑስ ድምር',
+        'shipping': 'ማጓጓዝ',
+        'free_shipping': 'ነጻ ማጓጓዝ',
+        'full_name': 'ሙሉ ስም',
+        'phone_number': 'ስልክ ቁጥር',
+        'address_label': 'አድራሻ',
+        'additional_notes': 'ተጨማሪ ማብራሪያ',
+        'submit_order': 'ትዕዛዝ ላክ',
+        'added_to_cart': 'ወደ ጋሪ ተጨምሯል',
+    },
+    'en': {
+        'search': 'Search products here...',
+        'all': 'All',
+        'order_now': 'Order Now',
+        'about_us': 'About Us',
+        'address': 'Address: Addis Ababa',
+        'promo': 'Special Offer!',
+        'home': 'Home',
+        'products': 'Products',
+        'contact': 'Contact',
+        'sofa': 'Sofa',
+        'bed': 'Bed',
+        'mejlis': 'Mejlis',
+        'curtain': 'Curtain',
+        'wardrobe': 'Wardrobe',
+        'admin_title': 'Admin Panel',
+        'products_manage': 'Products',
+        'add_product': 'Add Product',
+        'ads_manage': 'Advertisements',
+        'cart': 'Cart',
+        'account': 'Account',
+        'checkout': 'Checkout',
+        'total': 'Total',
+        'subtotal': 'Subtotal',
+        'shipping': 'Shipping',
+        'free_shipping': 'Free Shipping',
+        'full_name': 'Full Name',
+        'phone_number': 'Phone Number',
+        'address_label': 'Address',
+        'additional_notes': 'Additional Notes',
+        'submit_order': 'Submit Order',
+        'added_to_cart': 'Added to cart',
+    }
+}
+
+DEFAULT_LANGUAGE = 'am'
+SUPPORTED_LANGUAGES = ['am', 'en']
+
+
+def get_lang():
+    lang = session.get('lang', DEFAULT_LANGUAGE)
+    return lang if lang in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
+
+
+def get_text(key, lang=None):
+    if lang is None:
+        lang = get_lang()
+    return TEXTS.get(lang, TEXTS[DEFAULT_LANGUAGE]).get(key, key)
+
+
+def set_lang(lang):
+    if lang in SUPPORTED_LANGUAGES:
+        session['lang'] = lang
+        return True
+    return False
+
+
+@app.context_processor
+def inject_language():
+    current_lang = get_lang()
+    def _(key):
+        return get_text(key, current_lang)
+    return {
+        'lang': current_lang,
+        't': TEXTS.get(current_lang, TEXTS[DEFAULT_LANGUAGE]),
+        '_': _
+    }
+
+
+@app.route('/set_lang/<lang>')
+def set_language(lang):
+    if set_lang(lang):
+        flash(f'Language changed to {"አማርኛ" if lang == "am" else "English"}', 'success')
+    else:
+        flash('Invalid language selection', 'error')
+    next_page = request.referrer
+    if next_page and next_page != request.url:
+        return redirect(next_page)
+    return redirect(url_for('index'))
+
+
+# ==================== 4. 🔧 HELPER FUNCTIONS ====================
+
+def get_cart_count():
+    cart = session.get('cart', [])
+    return sum(item.get('quantity', 1) for item in cart)
+
+
+def get_cart_total():
+    cart = session.get('cart', [])
+    total = 0
+    for item in cart:
+        total += float(item.get('price', 0)) * item.get('quantity', 1)
+    return total
+
+
+def get_shipping_cost():
+    subtotal = get_cart_total()
+    threshold = int(os.environ.get('FREE_SHIPPING_THRESHOLD', '5000'))
+    cost = int(os.environ.get('SHIPPING_COST', '200'))
+    return 0 if subtotal >= threshold else cost
+
+
+def format_price(price):
+    try:
+        price_float = float(price)
+        return f"{price_float:,.0f}".replace(',', ',') + " ETB"
+    except (ValueError, TypeError):
+        return f"{price} ETB"
+
+
+def format_price_number(price):
+    try:
+        price_float = float(price)
+        return f"{price_float:,.0f}".replace(',', ',')
+    except (ValueError, TypeError):
+        return str(price)
+
+
+@app.template_filter('format_price')
+def format_price_filter(price):
+    return format_price(price)
+
+
+@app.template_filter('format_number')
+def format_number_filter(price):
+    return format_price_number(price)
+    # ==================== 5. 🛡️ ERROR HANDLERS ====================
+
+@app.errorhandler(404)
+def page_not_found(error):
+    """Handle 404 - Page Not Found errors."""
+    app.logger.warning(f"404 Error: {request.url}")
+    lang = get_lang()
+    
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'success': False, 'error': 'Page not found'}), 404
+    
+    if lang == 'en':
+        title = 'Page Not Found'
+        message = 'Sorry, the page you are looking for does not exist.'
+    else:
+        title = 'ገጹ አልተገኘም'
+        message = 'ይቅርታ፣ እርስዎ የፈለጉት ገጽ የለም።'
+    
+    return f'''
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"><title>404 - {title}</title>
+    <style>
+        *{{margin:0;padding:0;box-sizing:border-box;}}
+        body{{font-family:Arial, sans-serif;background:linear-gradient(135deg,#1a73e8,#0d47a1);display:flex;justify-content:center;align-items:center;height:100vh;}}
+        .box{{background:white;padding:40px;border-radius:20px;text-align:center;max-width:400px;}}
+        h1{{color:#1a73e8;font-size:80px;margin:0;}}
+        p{{margin:20px 0;color:#666;}}
+        a{{display:inline-block;background:#1a73e8;color:white;padding:12px 24px;text-decoration:none;border-radius:30px;}}
+    </style>
+    </head>
+    <body><div class="box"><h1>404</h1><p>{message}</p><a href="/">🏠 Home</a></div></body>
+    </html>
+    ''', 404
+
+
+@app.errorhandler(500)
+def internal_server_error(error):
+    """Handle 500 - Internal Server Error."""
+    app.logger.error(f"500 Error: {request.url} - {error}")
+    import traceback
+    app.logger.error(traceback.format_exc())
+    lang = get_lang()
+    
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500
+    
+    if lang == 'en':
+        message = 'Something went wrong. Please try again later.'
+    else:
+        message = 'ችግር ተፈጥሯል። እባክዎ ቆይተው ይሞክሩ።'
+    
+    return f'''
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"><title>500 - Server Error</title>
+    <style>
+        *{{margin:0;padding:0;box-sizing:border-box;}}
+        body{{font-family:Arial, sans-serif;background:linear-gradient(135deg,#e44d26,#c0392b);display:flex;justify-content:center;align-items:center;height:100vh;}}
+        .box{{background:white;padding:40px;border-radius:20px;text-align:center;max-width:400px;}}
+        h1{{color:#e44d26;font-size:80px;margin:0;}}
+        p{{margin:20px 0;color:#666;}}
+        a{{display:inline-block;background:#e44d26;color:white;padding:12px 24px;text-decoration:none;border-radius:30px;}}
+    </style>
+    </head>
+    <body><div class="box"><h1>500</h1><p>{message}</p><a href="/">🏠 Home</a></div></body>
+    </html>
+    ''', 500
+
+
+@app.errorhandler(403)
+def forbidden_error(error):
+    """Handle 403 - Forbidden Error."""
+    app.logger.warning(f"403 Error: {request.url}")
+    lang = get_lang()
+    
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'success': False, 'error': 'Forbidden'}), 403
+    
+    if lang == 'en':
+        message = 'You do not have permission to access this page.'
+    else:
+        message = 'ይህን ገጽ ለማየት ፈቃድ የለዎትም።'
+    
+    return f'''
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"><title>403 - Forbidden</title>
+    <style>
+        *{{margin:0;padding:0;box-sizing:border-box;}}
+        body{{font-family:Arial, sans-serif;background:linear-gradient(135deg,#f39c12,#e67e22);display:flex;justify-content:center;align-items:center;height:100vh;}}
+        .box{{background:white;padding:40px;border-radius:20px;text-align:center;max-width:400px;}}
+        h1{{color:#f39c12;font-size:80px;margin:0;}}
+        p{{margin:20px 0;color:#666;}}
+        .buttons{{display:flex;gap:10px;justify-content:center;}}
+        a{{display:inline-block;padding:10px 20px;border-radius:30px;text-decoration:none;}}
+        .home{{background:#1a73e8;color:white;}}
+        .login{{background:#f39c12;color:white;}}
+    </style>
+    </head>
+    <body><div class="box"><h1>403</h1><p>{message}</p><div class="buttons"><a href="/" class="home">🏠 Home</a><a href="/login" class="login">🔐 Login</a></div></div></body>
+    </html>
+    ''', 403
+
+
+# ==================== 6. 🏠 CUSTOMER ROUTES ====================
+
+@app.route('/')
+def index():
+    """Home page - displays products and advertisements."""
+    lang = get_lang()
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM products ORDER BY id DESC")
+        items = cursor.fetchall()
+        cursor.execute("SELECT * FROM ads ORDER BY id DESC")
+        ads = cursor.fetchall()
+        conn.close()
+        return render_template('customer/index.html', items=items, ads=ads, lang=lang, t=TEXTS.get(lang, TEXTS['am']))
+    except Exception as e:
+        app.logger.error(f"Home page error: {str(e)}")
+        return render_template('customer/index.html', items=[], ads=[], lang=lang, t=TEXTS.get(lang, TEXTS['am']))
+
+
+@app.route('/product/<int:product_id>')
+def product_detail(product_id):
+    """Product detail page."""
+    lang = get_lang()
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM products WHERE id = ?", (product_id,))
+        product = cursor.fetchone()
+        if not product:
+            flash('Product not found', 'error')
+            return redirect(url_for('index'))
+        conn.close()
+        return render_template('customer/product_detail.html', product=product, lang=lang, t=TEXTS.get(lang, TEXTS['am']))
+    except Exception as e:
+        app.logger.error(f"Product detail error: {str(e)}")
+        flash('Unable to load product', 'error')
+        return redirect(url_for('index'))
+
+
+@app.route('/category/<category>')
+def category_products(category):
+    """Category products page."""
+    lang = get_lang()
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        if category == 'all':
+            cursor.execute("SELECT * FROM products ORDER BY id DESC")
+            category_name = 'All Products' if lang == 'en' else 'ሁሉም ምርቶች'
+        else:
+            cursor.execute("SELECT * FROM products WHERE category = ? ORDER BY id DESC", (category,))
+            category_name = category
+        items = cursor.fetchall()
+        conn.close()
+        return render_template('customer/category.html', items=items, category=category_name, lang=lang, t=TEXTS.get(lang, TEXTS['am']))
+    except Exception as e:
+        app.logger.error(f"Category error: {str(e)}")
+        flash('Unable to load category', 'error')
+        return redirect(url_for('index'))
+
+
+@app.route('/search')
+def search():
+    """Search products page."""
+    lang = get_lang()
+    query = request.args.get('q', '').strip()
+    if not query:
+        return redirect(url_for('index'))
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        search_pattern = f'%{query}%'
+        cursor.execute("SELECT * FROM products WHERE name_am LIKE ? OR name_en LIKE ? ORDER BY id DESC", (search_pattern, search_pattern))
+        items = cursor.fetchall()
+        conn.close()
+        return render_template('customer/search.html', items=items, query=query, lang=lang, t=TEXTS.get(lang, TEXTS['am']))
+    except Exception as e:
+        app.logger.error(f"Search error: {str(e)}")
+        flash('Search failed', 'error')
+        return redirect(url_for('index'))
+
+
+@app.route('/about')
+def about():
+    """About page."""
+    lang = get_lang()
+    return render_template('customer/about.html', lang=lang, t=TEXTS.get(lang, TEXTS['am']))
+
+
+@app.route('/contact', methods=['GET', 'POST'])
+def contact():
+    """Contact page with WhatsApp integration."""
+    lang = get_lang()
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        email = request.form.get('email', '').strip()
+        phone = request.form.get('phone', '').strip()
+        message = request.form.get('message', '').strip()
+        if not name or not message:
+            flash('Please fill in name and message', 'error')
+            return redirect(url_for('contact'))
+        
+        whatsapp_msg = f"📬 New Contact Message\n\nName: {name}\nEmail: {email or 'Not provided'}\nPhone: {phone or 'Not provided'}\n\nMessage:\n{message}"
+        encoded = urllib.parse.quote(whatsapp_msg)
+        whatsapp_url = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded}"
+        flash('Message sent! Redirecting to WhatsApp...', 'success')
+        return redirect(whatsapp_url)
+    return render_template('customer/contact.html', lang=lang, t=TEXTS.get(lang, TEXTS['am']))
+
+
+@app.route('/static/uploads/<path:filename>')
+def uploaded_file(filename):
+    """Serve uploaded files securely."""
+    if '..' in filename or filename.startswith('/'):
+        abort(404)
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    # ==================== 7. 🛒 CART ROUTES ====================
+
+# ------------------------------------------------------------------
+# View Cart Route
+# ------------------------------------------------------------------
+@app.route('/cart')
+def view_cart():
+    """
+    Display the shopping cart page.
+    Shows all items currently in the user's cart.
+    """
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    # Get cart from session
+    cart = session.get('cart', [])
+    
+    # Calculate cart totals
+    cart_items = []
+    subtotal = 0
+    
+    for item in cart:
+        item_total = item.get('price', 0) * item.get('quantity', 1)
+        subtotal += item_total
+        cart_items.append({
+            'id': item.get('id'),
+            'name': item.get('name'),
+            'price': item.get('price', 0),
+            'quantity': item.get('quantity', 1),
+            'image': item.get('image', ''),
+            'total': item_total
+        })
+    
+    # Calculate shipping (free shipping over 5000 ETB)
+    threshold = int(os.environ.get('FREE_SHIPPING_THRESHOLD', '5000'))
+    shipping_cost = int(os.environ.get('SHIPPING_COST', '200'))
+    shipping = 0 if subtotal >= threshold else shipping_cost
+    total = subtotal + shipping
+    
+    app.logger.info(f"Cart viewed - Items: {len(cart_items)}, Total: {total} ETB")
+    
+    return render_template('customer/cart.html', 
+                           cart_items=cart_items,
+                           subtotal=subtotal,
+                           shipping=shipping,
+                           total=total,
+                           lang=lang,
+                           t=t)
+
+
+# ------------------------------------------------------------------
+# Add to Cart Route
+# ------------------------------------------------------------------
+@app.route('/cart/add', methods=['POST'])
+def add_to_cart():
+    """
+    Add a product to the shopping cart.
+    Accepts product details via POST request.
+    """
+    try:
+        # Get product details from form
+        product_id = request.form.get('product_id')
+        product_name = request.form.get('product_name')
+        product_price = float(request.form.get('product_price', 0))
+        product_image = request.form.get('product_image', '')
+        quantity = int(request.form.get('quantity', 1))
+        
+        # Validate input
+        if not product_id or not product_name or product_price <= 0:
+            flash('Invalid product information.', 'error')
+            return redirect(request.referrer or url_for('index'))
+        
+        if quantity < 1:
+            quantity = 1
+        
+        # Get current cart from session
+        cart = session.get('cart', [])
+        
+        # Check if product already exists in cart
+        found = False
+        for item in cart:
+            if str(item.get('id')) == str(product_id):
+                item['quantity'] += quantity
+                found = True
+                app.logger.info(f"Updated cart item: {product_name} x{item['quantity']}")
+                break
+        
+        # If product not in cart, add new item
+        if not found:
+            cart.append({
+                'id': str(product_id),
+                'name': product_name,
+                'price': product_price,
+                'quantity': quantity,
+                'image': product_image
+            })
+            app.logger.info(f"Added to cart: {product_name} x{quantity}")
+        
+        # Save cart back to session
+        session['cart'] = cart
+        session.modified = True
+        
+        # Calculate new cart count
+        cart_count = sum(item.get('quantity', 1) for item in cart)
+        
+        # Check if AJAX request
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({
+                'success': True,
+                'message': f'{product_name} added to cart!',
+                'cart_count': cart_count
+            })
+        
+        flash(f'{product_name} added to cart!', 'success')
+        return redirect(url_for('view_cart'))
+        
+    except Exception as e:
+        app.logger.error(f"Error adding to cart: {str(e)}")
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': 'Failed to add item to cart.'}), 500
+        flash('Failed to add item to cart. Please try again.', 'error')
+        return redirect(request.referrer or url_for('index'))
+
+
+# ------------------------------------------------------------------
+# Update Cart Route
+# ------------------------------------------------------------------
+@app.route('/cart/update', methods=['POST'])
+def update_cart():
+    """
+    Update item quantities in the shopping cart.
+    """
+    try:
+        product_id = request.form.get('product_id')
+        quantity = int(request.form.get('quantity', 1))
+        
+        if not product_id:
+            flash('Invalid product information.', 'error')
+            return redirect(url_for('view_cart'))
+        
+        if quantity < 1:
+            quantity = 1
+        
+        # Get current cart
+        cart = session.get('cart', [])
+        
+        # Update quantity
+        item_name = None
+        for item in cart:
+            if str(item.get('id')) == str(product_id):
+                item['quantity'] = quantity
+                item_name = item.get('name')
+                app.logger.info(f"Updated cart: {item_name} x{quantity}")
+                break
+        
+        # Save cart
+        session['cart'] = cart
+        session.modified = True
+        
+        # Calculate new totals
+        subtotal = 0
+        item_total = 0
+        for item in cart:
+            item_total_calc = item.get('price', 0) * item.get('quantity', 1)
+            subtotal += item_total_calc
+            if str(item.get('id')) == str(product_id):
+                item_total = item_total_calc
+        
+        threshold = int(os.environ.get('FREE_SHIPPING_THRESHOLD', '5000'))
+        shipping_cost = int(os.environ.get('SHIPPING_COST', '200'))
+        shipping = 0 if subtotal >= threshold else shipping_cost
+        total = subtotal + shipping
+        cart_count = sum(item.get('quantity', 1) for item in cart)
+        
+        # Check if AJAX request
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({
+                'success': True,
+                'item_total': item_total,
+                'subtotal': subtotal,
+                'shipping': shipping,
+                'total': total,
+                'cart_count': cart_count
+            })
+        
+        flash('Cart updated successfully!', 'success')
+        return redirect(url_for('view_cart'))
+        
+    except Exception as e:
+        app.logger.error(f"Error updating cart: {str(e)}")
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': 'Failed to update cart.'}), 500
+        flash('Failed to update cart. Please try again.', 'error')
+        return redirect(url_for('view_cart'))
+
+
+# ------------------------------------------------------------------
+# Remove from Cart Route
+# ------------------------------------------------------------------
+@app.route('/cart/remove/<item_id>')
+def remove_from_cart(item_id):
+    """
+    Remove an item from the shopping cart.
+    
+    Args:
+        item_id (str): The ID of the item to remove
+    """
+    try:
+        # Get current cart
+        cart = session.get('cart', [])
+        
+        # Find and remove item
+        removed_item = None
+        new_cart = []
+        for item in cart:
+            if str(item.get('id')) == str(item_id):
+                removed_item = item
+            else:
+                new_cart.append(item)
+        
+        # Save updated cart
+        session['cart'] = new_cart
+        session.modified = True
+        
+        if removed_item:
+            app.logger.info(f"Removed from cart: {removed_item.get('name')}")
+            flash(f'{removed_item.get("name")} removed from cart.', 'success')
+        else:
+            flash('Item not found in cart.', 'warning')
+        
+        return redirect(url_for('view_cart'))
+        
+    except Exception as e:
+        app.logger.error(f"Error removing from cart: {str(e)}")
+        flash('Failed to remove item. Please try again.', 'error')
+        return redirect(url_for('view_cart'))
+
+
+# ------------------------------------------------------------------
+# Clear Cart Route
+# ------------------------------------------------------------------
+@app.route('/cart/clear')
+def clear_cart():
+    """
+    Clear all items from the shopping cart.
+    """
+    try:
+        # Get cart size before clearing
+        cart = session.get('cart', [])
+        item_count = len(cart)
+        
+        # Clear cart
+        session['cart'] = []
+        session.modified = True
+        
+        app.logger.info(f"Cart cleared - Removed {item_count} items")
+        flash('Cart has been cleared.', 'success')
+        
+        return redirect(url_for('view_cart'))
+        
+    except Exception as e:
+        app.logger.error(f"Error clearing cart: {str(e)}")
+        flash('Failed to clear cart. Please try again.', 'error')
+        return redirect(url_for('view_cart'))
+
+
+# ------------------------------------------------------------------
+# Checkout Route
+# ------------------------------------------------------------------
+@app.route('/checkout', methods=['GET', 'POST'])
+def checkout():
+    """
+    Checkout page - Collect customer information and process order.
+    """
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    # Get cart from session
+    cart = session.get('cart', [])
+    
+    # Check if cart is empty
+    if not cart:
+        flash('Your cart is empty. Please add some items before checkout.', 'warning')
+        return redirect(url_for('view_cart'))
+    
+    # Calculate totals
+    subtotal = 0
+    for item in cart:
+        subtotal += item.get('price', 0) * item.get('quantity', 1)
+    
+    threshold = int(os.environ.get('FREE_SHIPPING_THRESHOLD', '5000'))
+    shipping_cost = int(os.environ.get('SHIPPING_COST', '200'))
+    shipping = 0 if subtotal >= threshold else shipping_cost
+    total = subtotal + shipping
+    
+    if request.method == 'POST':
+        try:
+            # Get customer information
+            customer_name = request.form.get('customer_name', '').strip()
+            customer_phone = request.form.get('customer_phone', '').strip()
+            customer_address = request.form.get('customer_address', '').strip()
+            customer_email = request.form.get('customer_email', '').strip()
+            order_notes = request.form.get('order_notes', '').strip()
+            
+            # Validate required fields
+            if not customer_name or not customer_phone:
+                flash('Please fill in your name and phone number.', 'error')
+                return redirect(url_for('checkout'))
+            
+            # Prepare order message for WhatsApp
+            order_message = "🛍️ *NEW ORDER - Ethiosadat Furniture*\n"
+            order_message += "=" * 40 + "\n\n"
+            order_message += f"👤 *Customer Name:* {customer_name}\n"
+            order_message += f"📞 *Phone:* {customer_phone}\n"
+            if customer_address:
+                order_message += f"📍 *Address:* {customer_address}\n"
+            if customer_email:
+                order_message += f"📧 *Email:* {customer_email}\n"
+            if order_notes:
+                order_message += f"📝 *Notes:* {order_notes}\n"
+            
+            order_message += "\n" + "=" * 40 + "\n"
+            order_message += "🛒 *ORDER ITEMS:*\n"
+            order_message += "-" * 30 + "\n"
+            
+            for item in cart:
+                item_name = item.get('name', 'Unknown')
+                item_price = item.get('price', 0)
+                item_qty = item.get('quantity', 1)
+                item_total = item_price * item_qty
+                order_message += f"• {item_name}\n"
+                order_message += f"  {item_price} ETB x {item_qty} = {item_total} ETB\n"
+            
+            order_message += "-" * 30 + "\n"
+            order_message += f"💰 *Subtotal:* {subtotal} ETB\n"
+            order_message += f"🚚 *Shipping:* {shipping} ETB\n"
+            order_message += "=" * 30 + "\n"
+            order_message += f"💵 *TOTAL:* {total} ETB\n"
+            order_message += "=" * 30 + "\n\n"
+            order_message += "🙏 Thank you for shopping with Ethiosadat!"
+            
+            # Encode message for WhatsApp
+            encoded_message = urllib.parse.quote(order_message)
+            whatsapp_url = f"https://wa.me/{WHATSAPP_NUMBER}?text={encoded_message}"
+            
+            # Clear cart after successful order
+            session['cart'] = []
+            session.modified = True
+            
+            app.logger.info(f"Order placed by {customer_name} - Total: {total} ETB")
+            flash('Your order has been placed successfully! You will be redirected to WhatsApp.', 'success')
+            
+            return redirect(whatsapp_url)
+            
+        except Exception as e:
+            app.logger.error(f"Error processing checkout: {str(e)}")
+            flash('An error occurred while processing your order. Please try again.', 'error')
+            return redirect(url_for('checkout'))
+    
+    # GET request - show checkout form
+    return render_template('customer/checkout.html',
+                           cart=cart,
+                           subtotal=subtotal,
+                           shipping=shipping,
+                           total=total,
+                           lang=lang,
+                           t=t)
+
+
+# ------------------------------------------------------------------
+# Cart Count API Route (for AJAX)
+# ------------------------------------------------------------------
+@app.route('/api/cart/count')
+def cart_count():
+    """
+    API endpoint to get current cart item count.
+    Useful for updating cart badge dynamically.
+    """
+    cart = session.get('cart', [])
+    cart_count = sum(item.get('quantity', 1) for item in cart)
+    
+    return jsonify({
+        'success': True,
+        'cart_count': cart_count
+    })
+    # ==================== 8. 🔐 AUTHENTICATION ROUTES ====================
+
+# ------------------------------------------------------------------
+# Admin Login Route
+# ------------------------------------------------------------------
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """
+    Admin login page - Authenticates admin user.
+    GET: Display login form
+    POST: Process login credentials
+    """
+    # If already logged in, redirect to admin dashboard
+    if session.get('admin'):
+        app.logger.info("User already logged in, redirecting to admin dashboard")
+        return redirect(url_for('admin_dashboard'))
+    
+    # Get current language
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    if request.method == 'POST':
+        # Get password from form
+        password = request.form.get('password', '').strip()
+        
+        # Validate password
+        if not password:
+            flash('Please enter your password.', 'error')
+            return render_template('admin/login.html', error='Please enter your password.', lang=lang, t=t)
+        
+        # Check against admin password
+        if password == ADMIN_PASSWORD:
+            # Login successful
+            session['admin'] = True
+            session.permanent = True
+            app.logger.info("Admin logged in successfully")
+            
+            flash('Welcome back, Admin!', 'success')
+            
+            # Redirect to admin dashboard
+            next_page = request.args.get('next') or request.form.get('next')
+            if next_page and next_page.startswith('/'):
+                return redirect(next_page)
+            return redirect(url_for('admin_dashboard'))
+        else:
+            # Login failed
+            app.logger.warning(f"Failed login attempt from {request.remote_addr}")
+            flash('Invalid password. Please try again.', 'error')
+            return render_template('admin/login.html', error='Invalid password. Please try again.', lang=lang, t=t)
+    
+    # GET request - display login form
+    return render_template('admin/login.html', lang=lang, t=t, error=None)
+
+
+# ------------------------------------------------------------------
+# Admin Logout Route
+# ------------------------------------------------------------------
+@app.route('/logout')
+def logout():
+    """
+    Admin logout - Clears admin session and redirects to home page.
+    """
+    # Clear admin session
+    if session.get('admin'):
+        app.logger.info("Admin logged out")
+        session.pop('admin', None)
+        flash('You have been logged out successfully.', 'success')
+    else:
+        flash('You were not logged in.', 'info')
+    
+    return redirect(url_for('index'))
+
+
+# ------------------------------------------------------------------
+# Helper function to check if user is logged in
+# ------------------------------------------------------------------
+def is_admin():
+    """
+    Check if the current user is logged in as admin.
+    
+    Returns:
+        bool: True if admin is logged in, False otherwise
+    """
+    return session.get('admin', False)
+
+
+# ------------------------------------------------------------------
+# Login Required Decorator (for routes that need admin access)
+# ------------------------------------------------------------------
+def login_required_manual(f):
+    """
+    Decorator to require admin login for routes.
+    
+    Usage:
+        @app.route('/admin/protected')
+        @login_required_manual
+        def protected_page():
+            return "Protected content"
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('admin'):
+            flash('Please log in to access this page.', 'warning')
+            return redirect(url_for('login', next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# ==================== 9. 👑 ADMIN ROUTES ====================
+
+# ------------------------------------------------------------------
+# Admin Dashboard
+# ------------------------------------------------------------------
+@app.route('/admin')
+def admin_dashboard():
+    """
+    Admin dashboard - Main admin panel with statistics.
+    Displays overview of products and ads.
+    """
+    # Check if user is logged in as admin
+    if not session.get('admin'):
+        flash('Please log in to access the admin panel.', 'warning')
+        return redirect(url_for('login'))
+    
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Get counts
+        cursor.execute("SELECT COUNT(*) FROM products")
+        products_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM ads")
+        ads_count = cursor.fetchone()[0]
+        
+        # Get recent products (last 5)
+        cursor.execute("SELECT * FROM products ORDER BY id DESC LIMIT 5")
+        recent_products = cursor.fetchall()
+        
+        # Get recent ads (last 5)
+        cursor.execute("SELECT * FROM ads ORDER BY id DESC LIMIT 5")
+        recent_ads = cursor.fetchall()
+        
+        conn.close()
+        
+        app.logger.info(f"Admin dashboard accessed - Products: {products_count}, Ads: {ads_count}")
+        
+        return render_template('admin/dashboard.html',
+                               products_count=products_count,
+                               ads_count=ads_count,
+                               recent_products=recent_products,
+                               recent_ads=recent_ads,
+                               lang=lang,
+                               t=t)
+    
+    except Exception as e:
+        app.logger.error(f"Error loading admin dashboard: {str(e)}")
+        flash('Error loading dashboard data.', 'error')
+        return render_template('admin/dashboard.html', 
+                               products_count=0, ads_count=0, 
+                               recent_products=[], recent_ads=[],
+                               lang=lang, t=t)
+
+
+# ------------------------------------------------------------------
+# Product Management Routes
+# ------------------------------------------------------------------
+@app.route('/admin/products')
+def admin_products():
+    """
+    Admin product list - View all products with management options.
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM products ORDER BY id DESC")
+        products = cursor.fetchall()
+        conn.close()
+        
+        app.logger.info(f"Admin product list viewed - {len(products)} products")
+        
+        return render_template('admin/products/index.html',
+                               products=products,
+                               lang=lang,
+                               t=t)
+    
+    except Exception as e:
+        app.logger.error(f"Error loading admin products: {str(e)}")
+        flash('Error loading products.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/products/add', methods=['GET', 'POST'])
+def admin_add_product():
+    """
+    Add new product - GET: Show form, POST: Process form data.
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    if request.method == 'POST':
+        try:
+            # Get form data
+            name_am = request.form.get('name_am', '').strip()
+            name_en = request.form.get('name_en', '').strip()
+            price = request.form.get('price', '').strip()
+            old_price = request.form.get('old_price', '').strip()
+            category = request.form.get('category', 'ሌላ')
+            
+            # Validate required fields
+            if not name_am or not name_en or not price:
+                flash('Please fill in all required fields.', 'error')
+                return redirect(url_for('admin_add_product'))
+            
+            # Handle image upload
+            image_file = request.files.get('image')
+            image_filename = ''
+            
+            if image_file and image_file.filename:
+                if allowed_file(image_file.filename):
+                    # Save file to products subfolder
+                    ext = image_file.filename.rsplit('.', 1)[1].lower()
+                    image_filename = f"{uuid.uuid4().hex}_{datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
+                    upload_path = os.path.join(app.config['UPLOAD_FOLDER'], 'products')
+                    os.makedirs(upload_path, exist_ok=True)
+                    image_file.save(os.path.join(upload_path, image_filename))
+                    app.logger.info(f"Product image saved: {image_filename}")
+                else:
+                    flash('Invalid file type. Please upload an image (PNG, JPG, JPEG, GIF, WEBP).', 'error')
+                    return redirect(url_for('admin_add_product'))
+            
+            # Save to database
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO products (name_am, name_en, price, old_price, image, category)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (name_am, name_en, price, old_price, image_filename, category))
+            conn.commit()
+            conn.close()
+            
+            app.logger.info(f"New product added: {name_am}")
+            flash(f'Product "{name_am}" added successfully!', 'success')
+            return redirect(url_for('admin_products'))
+            
+        except Exception as e:
+            app.logger.error(f"Error adding product: {str(e)}")
+            flash('Error adding product. Please try again.', 'error')
+            return redirect(url_for('admin_add_product'))
+    
+    # GET request - show form
+    return render_template('admin/products/add.html', lang=lang, t=t)
+
+
+@app.route('/admin/products/edit/<int:pid>', methods=['GET', 'POST'])
+def admin_edit_product(pid):
+    """
+    Edit product - GET: Show form with product data, POST: Update product.
+    
+    Args:
+        pid (int): Product ID
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM products WHERE id = ?", (pid,))
+        product = cursor.fetchone()
+        conn.close()
+        
+        if not product:
+            flash('Product not found.', 'error')
+            return redirect(url_for('admin_products'))
+        
+        if request.method == 'POST':
+            # Get form data
+            name_am = request.form.get('name_am', '').strip()
+            name_en = request.form.get('name_en', '').strip()
+            price = request.form.get('price', '').strip()
+            old_price = request.form.get('old_price', '').strip()
+            category = request.form.get('category', 'ሌላ')
+            
+            # Validate
+            if not name_am or not name_en or not price:
+                flash('Please fill in all required fields.', 'error')
+                return redirect(url_for('admin_edit_product', pid=pid))
+            
+            # Handle image upload
+            image_file = request.files.get('image')
+            image_filename = product[5] if len(product) > 5 else ''  # Keep existing image
+            
+            if image_file and image_file.filename:
+                if allowed_file(image_file.filename):
+                    # Delete old image if exists
+                    if image_filename:
+                        old_path = os.path.join(app.config['UPLOAD_FOLDER'], 'products', image_filename)
+                        if os.path.exists(old_path):
+                            os.remove(old_path)
+                            app.logger.info(f"Deleted old product image: {image_filename}")
+                    
+                    # Save new image
+                    ext = image_file.filename.rsplit('.', 1)[1].lower()
+                    image_filename = f"{uuid.uuid4().hex}_{datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
+                    upload_path = os.path.join(app.config['UPLOAD_FOLDER'], 'products')
+                    os.makedirs(upload_path, exist_ok=True)
+                    image_file.save(os.path.join(upload_path, image_filename))
+                    app.logger.info(f"Product image updated: {image_filename}")
+                else:
+                    flash('Invalid file type. Please upload an image.', 'error')
+                    return redirect(url_for('admin_edit_product', pid=pid))
+            
+            # Update database
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE products 
+                SET name_am=?, name_en=?, price=?, old_price=?, image=?, category=?
+                WHERE id=?
+            """, (name_am, name_en, price, old_price, image_filename, category, pid))
+            conn.commit()
+            conn.close()
+            
+            app.logger.info(f"Product updated: ID {pid} - {name_am}")
+            flash(f'Product "{name_am}" updated successfully!', 'success')
+            return redirect(url_for('admin_products'))
+        
+        return render_template('admin/products/edit.html', product=product, lang=lang, t=t)
+    
+    except Exception as e:
+        app.logger.error(f"Error editing product {pid}: {str(e)}")
+        flash('Error editing product.', 'error')
+        return redirect(url_for('admin_products'))
+
+
+@app.route('/admin/products/delete/<int:pid>')
+def admin_delete_product(pid):
+    """
+    Delete product - Remove product from database and delete image.
+    
+    Args:
+        pid (int): Product ID
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Get product image before deleting
+        cursor.execute("SELECT name_am, image FROM products WHERE id = ?", (pid,))
+        product = cursor.fetchone()
+        
+        if product:
+            # Delete image file if exists
+            if product[1]:
+                image_path = os.path.join(app.config['UPLOAD_FOLDER'], 'products', product[1])
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+                    app.logger.info(f"Deleted product image: {product[1]}")
+            
+            # Delete from database
+            cursor.execute("DELETE FROM products WHERE id = ?", (pid,))
+            conn.commit()
+            
+            app.logger.info(f"Product deleted: ID {pid} - {product[0]}")
+            flash(f'Product "{product[0]}" deleted successfully!', 'success')
+        else:
+            flash('Product not found.', 'error')
+        
+        conn.close()
+        return redirect(url_for('admin_products'))
+    
+    except Exception as e:
+        app.logger.error(f"Error deleting product {pid}: {str(e)}")
+        flash('Error deleting product.', 'error')
+        return redirect(url_for('admin_products'))
+# ------------------------------------------------------------------
+# Advertisement Management Routes
+# ------------------------------------------------------------------
+@app.route('/admin/ads')
+def admin_ads():
+    """
+    Admin advertisement list - View all ads with management options.
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM ads ORDER BY id DESC")
+        ads = cursor.fetchall()
+        conn.close()
+        
+        app.logger.info(f"Admin ads list viewed - {len(ads)} ads")
+        
+        return render_template('admin/ads/index.html', ads=ads, lang=lang, t=t)
+    
+    except Exception as e:
+        app.logger.error(f"Error loading admin ads: {str(e)}")
+        flash('Error loading advertisements.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/ads/add', methods=['POST'])
+def admin_add_ad():
+    """
+    Add new advertisement - Process form data and save.
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    try:
+        ad_text = request.form.get('ad_text', '').strip()
+        
+        if not ad_text:
+            flash('Please enter advertisement text.', 'error')
+            return redirect(url_for('admin_ads'))
+        
+        # Handle media upload
+        media_file = request.files.get('media')
+        media_filename = ''
+        
+        if media_file and media_file.filename:
+            if allowed_file(media_file.filename):
+                # Save file to ads subfolder
+                ext = media_file.filename.rsplit('.', 1)[1].lower()
+                media_filename = f"{uuid.uuid4().hex}_{datetime.now().strftime('%Y%m%d%H%M%S')}.{ext}"
+                upload_path = os.path.join(app.config['UPLOAD_FOLDER'], 'ads')
+                os.makedirs(upload_path, exist_ok=True)
+                media_file.save(os.path.join(upload_path, media_filename))
+                app.logger.info(f"Ad media saved: {media_filename}")
+            else:
+                flash('Invalid file type. Please upload an image or video.', 'error')
+                return redirect(url_for('admin_ads'))
+        
+        # Save to database
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO ads (text, media) VALUES (?, ?)", (ad_text, media_filename))
+        conn.commit()
+        conn.close()
+        
+        app.logger.info(f"New advertisement added: {ad_text[:50]}...")
+        flash('Advertisement added successfully!', 'success')
+        return redirect(url_for('admin_ads'))
+    
+    except Exception as e:
+        app.logger.error(f"Error adding advertisement: {str(e)}")
+        flash('Error adding advertisement.', 'error')
+        return redirect(url_for('admin_ads'))
+
+
+@app.route('/admin/ads/delete/<int:aid>')
+def admin_delete_ad(aid):
+    """
+    Delete advertisement - Remove ad from database and delete media.
+    
+    Args:
+        aid (int): Advertisement ID
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Get ad media before deleting
+        cursor.execute("SELECT text, media FROM ads WHERE id = ?", (aid,))
+        ad = cursor.fetchone()
+        
+        if ad:
+            # Delete media file if exists
+            if ad[1]:
+                media_path = os.path.join(app.config['UPLOAD_FOLDER'], 'ads', ad[1])
+                if os.path.exists(media_path):
+                    os.remove(media_path)
+                    app.logger.info(f"Deleted ad media: {ad[1]}")
+            
+            # Delete from database
+            cursor.execute("DELETE FROM ads WHERE id = ?", (aid,))
+            conn.commit()
+            
+            app.logger.info(f"Advertisement deleted: {ad[0][:50]}...")
+            flash('Advertisement deleted successfully!', 'success')
+        else:
+            flash('Advertisement not found.', 'error')
+        
+        conn.close()
+        return redirect(url_for('admin_ads'))
+    
+    except Exception as e:
+        app.logger.error(f"Error deleting advertisement {aid}: {str(e)}")
+        flash('Error deleting advertisement.', 'error')
+        return redirect(url_for('admin_ads'))
+
+
+# ------------------------------------------------------------------
+# Order Management Routes
+# ------------------------------------------------------------------
+@app.route('/admin/orders')
+def admin_orders():
+    """
+    Admin orders list - View all customer orders.
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Check if orders table exists, if not, create it
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='orders'")
+        if not cursor.fetchone():
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS orders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    order_number TEXT UNIQUE,
+                    customer_name TEXT NOT NULL,
+                    customer_phone TEXT NOT NULL,
+                    customer_address TEXT,
+                    customer_email TEXT,
+                    items TEXT,
+                    subtotal REAL,
+                    shipping_cost REAL,
+                    total REAL,
+                    status TEXT DEFAULT 'pending',
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            conn.commit()
+        
+        cursor.execute("SELECT * FROM orders ORDER BY id DESC")
+        orders = cursor.fetchall()
+        conn.close()
+        
+        app.logger.info(f"Admin orders list viewed - {len(orders)} orders")
+        
+        return render_template('admin/orders/index.html', orders=orders, lang=lang, t=t)
+    
+    except Exception as e:
+        app.logger.error(f"Error loading admin orders: {str(e)}")
+        flash('Error loading orders.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/orders/<int:oid>')
+def admin_order_detail(oid):
+    """
+    Admin order detail - View specific order details.
+    
+    Args:
+        oid (int): Order ID
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM orders WHERE id = ?", (oid,))
+        order = cursor.fetchone()
+        conn.close()
+        
+        if not order:
+            flash('Order not found.', 'error')
+            return redirect(url_for('admin_orders'))
+        
+        # Parse items JSON if needed
+        items = []
+        if order[6]:
+            try:
+                items = json.loads(order[6])
+            except:
+                items = []
+        
+        return render_template('admin/orders/detail.html', order=order, items=items, lang=lang, t=t)
+    
+    except Exception as e:
+        app.logger.error(f"Error loading order {oid}: {str(e)}")
+        flash('Error loading order details.', 'error')
+        return redirect(url_for('admin_orders'))
+
+
+@app.route('/admin/orders/update/<int:oid>', methods=['POST'])
+def admin_update_order(oid):
+    """
+    Update order status.
+    
+    Args:
+        oid (int): Order ID
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    try:
+        status = request.form.get('status', 'pending')
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE orders SET status = ? WHERE id = ?", (status, oid))
+        conn.commit()
+        conn.close()
+        
+        app.logger.info(f"Order {oid} status updated to: {status}")
+        flash(f'Order #{oid} status updated successfully!', 'success')
+        return redirect(url_for('admin_order_detail', oid=oid))
+    
+    except Exception as e:
+        app.logger.error(f"Error updating order {oid}: {str(e)}")
+        flash('Error updating order status.', 'error')
+        return redirect(url_for('admin_order_detail', oid=oid))
+
+
+# ------------------------------------------------------------------
+# Report Routes
+# ------------------------------------------------------------------
+@app.route('/admin/reports')
+def admin_reports():
+    """
+    Reports dashboard - View sales and product statistics.
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Get counts
+        cursor.execute("SELECT COUNT(*) FROM products")
+        total_products = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM orders")
+        total_orders = cursor.fetchone()[0]
+        
+        # Get category distribution
+        cursor.execute("SELECT category, COUNT(*) FROM products WHERE category IS NOT NULL GROUP BY category")
+        categories = cursor.fetchall()
+        
+        # Calculate total revenue from delivered orders
+        cursor.execute("SELECT SUM(total) FROM orders WHERE status = 'delivered'")
+        total_revenue = cursor.fetchone()[0] or 0
+        
+        # Get pending orders count
+        cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'pending'")
+        pending_orders = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        app.logger.info("Admin reports viewed")
+        
+        return render_template('admin/reports/index.html',
+                               total_products=total_products,
+                               total_orders=total_orders,
+                               total_revenue=total_revenue,
+                               pending_orders=pending_orders,
+                               categories=categories,
+                               lang=lang, t=t)
+    
+    except Exception as e:
+        app.logger.error(f"Error loading reports: {str(e)}")
+        flash('Error loading reports.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/reports/sales')
+def sales_report():
+    """
+    Sales report - View sales statistics and charts.
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    app.logger.info("Sales report viewed")
+    return render_template('admin/reports/sales.html', lang=lang, t=t)
+
+
+@app.route('/admin/reports/products')
+def products_report():
+    """
+    Products report - View product performance statistics.
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM products ORDER BY id DESC")
+        products = cursor.fetchall()
+        conn.close()
+        
+        app.logger.info("Products report viewed")
+        
+        return render_template('admin/reports/products.html', products=products, lang=lang, t=t)
+    
+    except Exception as e:
+        app.logger.error(f"Error loading products report: {str(e)}")
+        flash('Error loading report.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+
+# ------------------------------------------------------------------
+# Settings Route
+# ------------------------------------------------------------------
+@app.route('/admin/settings', methods=['GET', 'POST'])
+def admin_settings():
+    """
+    Admin settings - Configure site settings.
+    """
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+    
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    # Get current settings from database
+    current_settings = {}
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT key, value FROM settings")
+        for row in cursor.fetchall():
+            current_settings[row[0]] = row[1]
+        conn.close()
+    except:
+        pass
+    
+    if request.method == 'POST':
+        try:
+            # Get settings from form
+            whatsapp_number = request.form.get('whatsapp_number', '251906020606')
+            shipping_threshold = request.form.get('shipping_threshold', '5000')
+            shipping_cost = request.form.get('shipping_cost', '200')
+            site_name = request.form.get('site_name', 'Ethiosadat Furniture')
+            site_email = request.form.get('site_email', 'info@ethiosadat.com')
+            
+            conn = get_db()
+            cursor = conn.cursor()
+            
+            # Update or insert settings
+            settings_data = [
+                ('whatsapp_number', whatsapp_number),
+                ('free_shipping_threshold', shipping_threshold),
+                ('shipping_cost', shipping_cost),
+                ('site_name', site_name),
+                ('site_email', site_email)
+            ]
+            
+            for key, value in settings_data:
+                cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+            
+            conn.commit()
+            conn.close()
+            
+            # Update environment variables for current session
+            os.environ['WHATSAPP_NUMBER'] = whatsapp_number
+            os.environ['FREE_SHIPPING_THRESHOLD'] = shipping_threshold
+            os.environ['SHIPPING_COST'] = shipping_cost
+            
+            app.logger.info("Admin settings updated")
+            flash('Settings saved successfully!', 'success')
+            return redirect(url_for('admin_settings'))
+            
+        except Exception as e:
+            app.logger.error(f"Error saving settings: {str(e)}")
+            flash('Error saving settings.', 'error')
+    
+    # GET request - show settings form with current values
+    return render_template('admin/settings.html', 
+                           settings=current_settings,
+                           whatsapp_number=current_settings.get('whatsapp_number', '251906020606'),
+                           free_shipping_threshold=current_settings.get('free_shipping_threshold', '5000'),
+                           shipping_cost=current_settings.get('shipping_cost', '200'),
+                           lang=lang, t=t)  
+# ==================== 10. 📬 API ROUTES (for AJAX calls) ====================
+
+# ------------------------------------------------------------------
+# API: Get Products (JSON)
+# ------------------------------------------------------------------
+@app.route('/api/products')
+def api_products():
+    """
+    API endpoint to get all products in JSON format.
+    Supports optional category filtering.
+    
+    Query Parameters:
+        category (str, optional): Filter by category
+        limit (int, optional): Limit number of results
+    """
+    try:
+        category = request.args.get('category', '')
+        limit = request.args.get('limit', 100, type=int)
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        if category and category != 'all' and category != 'All':
+            cursor.execute("""
+                SELECT id, name_am, name_en, price, old_price, image, category 
+                FROM products 
+                WHERE category = ? 
+                ORDER BY id DESC LIMIT ?
+            """, (category, limit))
+        else:
+            cursor.execute("""
+                SELECT id, name_am, name_en, price, old_price, image, category 
+                FROM products 
+                ORDER BY id DESC LIMIT ?
+            """, (limit,))
+        
+        products = cursor.fetchall()
+        conn.close()
+        
+        # Convert to list of dictionaries
+        products_list = []
+        for p in products:
+            image_url = url_for('static', filename=f'uploads/{p[5]}') if p[5] and p[5] != '' else ''
+            products_list.append({
+                'id': p[0],
+                'name_am': p[1],
+                'name_en': p[2],
+                'price': p[3],
+                'old_price': p[4] if len(p) > 4 else None,
+                'image': image_url,
+                'category': p[6] if len(p) > 6 else ''
+            })
+        
+        app.logger.info(f"API: Products fetched - {len(products_list)} items")
+        
+        return jsonify({
+            'success': True,
+            'products': products_list,
+            'count': len(products_list)
+        })
+        
+    except Exception as e:
+        app.logger.error(f"API Error fetching products: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch products',
+            'message': str(e)
+        }), 500
+
+
+# ------------------------------------------------------------------
+# API: Get Single Product (JSON)
+# ------------------------------------------------------------------
+@app.route('/api/product/<int:product_id>')
+def api_product(product_id):
+    """
+    API endpoint to get a single product in JSON format.
+    
+    Args:
+        product_id (int): Product ID
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name_am, name_en, price, old_price, image, category 
+            FROM products WHERE id = ?
+        """, (product_id,))
+        
+        product = cursor.fetchone()
+        conn.close()
+        
+        if not product:
+            return jsonify({
+                'success': False,
+                'error': 'Product not found'
+            }), 404
+        
+        image_url = url_for('static', filename=f'uploads/{product[5]}') if product[5] and product[5] != '' else ''
+        
+        product_data = {
+            'id': product[0],
+            'name_am': product[1],
+            'name_en': product[2],
+            'price': product[3],
+            'old_price': product[4] if len(product) > 4 else None,
+            'image': image_url,
+            'category': product[6] if len(product) > 6 else ''
+        }
+        
+        app.logger.info(f"API: Product fetched - ID {product_id}")
+        
+        return jsonify({
+            'success': True,
+            'product': product_data
+        })
+        
+    except Exception as e:
+        app.logger.error(f"API Error fetching product {product_id}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch product',
+            'message': str(e)
+        }), 500
+
+
+# ------------------------------------------------------------------
+# API: Get Cart Information (JSON)
+# ------------------------------------------------------------------
+@app.route('/api/cart')
+def api_cart():
+    """
+    API endpoint to get current cart contents in JSON format.
+    """
+    try:
+        cart = session.get('cart', [])
+        
+        cart_items = []
+        subtotal = 0
+        
+        for item in cart:
+            item_total = item.get('price', 0) * item.get('quantity', 1)
+            subtotal += item_total
+            cart_items.append({
+                'id': item.get('id'),
+                'name': item.get('name'),
+                'price': item.get('price', 0),
+                'quantity': item.get('quantity', 1),
+                'image': item.get('image', ''),
+                'total': item_total
+            })
+        
+        threshold = int(os.environ.get('FREE_SHIPPING_THRESHOLD', '5000'))
+        shipping_cost = int(os.environ.get('SHIPPING_COST', '200'))
+        shipping = 0 if subtotal >= threshold else shipping_cost
+        total = subtotal + shipping
+        cart_count = sum(item.get('quantity', 1) for item in cart)
+        
+        return jsonify({
+            'success': True,
+            'cart': cart_items,
+            'count': cart_count,
+            'subtotal': subtotal,
+            'shipping': shipping,
+            'total': total
+        })
+        
+    except Exception as e:
+        app.logger.error(f"API Error fetching cart: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch cart',
+            'message': str(e)
+        }), 500
+
+
+# ------------------------------------------------------------------
+# API: Add to Cart (AJAX)
+# ------------------------------------------------------------------
+@app.route('/api/cart/add', methods=['POST'])
+def api_add_to_cart():
+    """
+    API endpoint to add item to cart via AJAX.
+    Expects JSON payload with product details.
+    """
+    try:
+        # Get JSON data from request
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
+        
+        product_id = str(data.get('product_id'))
+        product_name = data.get('product_name')
+        product_price = float(data.get('product_price', 0))
+        product_image = data.get('product_image', '')
+        quantity = int(data.get('quantity', 1))
+        
+        # Validate
+        if not product_id or not product_name or product_price <= 0:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid product information'
+            }), 400
+        
+        if quantity < 1:
+            quantity = 1
+        
+        # Get current cart
+        cart = session.get('cart', [])
+        
+        # Check if product already exists
+        found = False
+        for item in cart:
+            if str(item.get('id')) == product_id:
+                item['quantity'] += quantity
+                found = True
+                break
+        
+        # Add new item if not found
+        if not found:
+            cart.append({
+                'id': product_id,
+                'name': product_name,
+                'price': product_price,
+                'quantity': quantity,
+                'image': product_image
+            })
+        
+        # Save cart
+        session['cart'] = cart
+        session.modified = True
+        
+        # Calculate new cart count
+        cart_count = sum(item.get('quantity', 1) for item in cart)
+        
+        app.logger.info(f"API: Added to cart - {product_name} x{quantity}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'{product_name} added to cart!',
+            'cart_count': cart_count
+        })
+        
+    except Exception as e:
+        app.logger.error(f"API Error adding to cart: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to add to cart',
+            'message': str(e)
+        }), 500
+
+
+# ------------------------------------------------------------------
+# API: Update Cart Item (AJAX)
+# ------------------------------------------------------------------
+@app.route('/api/cart/update', methods=['POST'])
+def api_update_cart():
+    """
+    API endpoint to update cart item quantity via AJAX.
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
+        
+        product_id = str(data.get('product_id'))
+        quantity = int(data.get('quantity', 1))
+        
+        if not product_id:
+            return jsonify({
+                'success': False,
+                'error': 'Product ID required'
+            }), 400
+        
+        if quantity < 1:
+            quantity = 1
+        
+        # Get current cart
+        cart = session.get('cart', [])
+        
+        # Update quantity
+        item_found = None
+        for item in cart:
+            if str(item.get('id')) == product_id:
+                item['quantity'] = quantity
+                item_found = item
+                break
+        
+        if not item_found:
+            return jsonify({
+                'success': False,
+                'error': 'Item not found in cart'
+            }), 404
+        
+        # Save cart
+        session['cart'] = cart
+        session.modified = True
+        
+        # Calculate totals
+        subtotal = 0
+        for item in cart:
+            subtotal += item.get('price', 0) * item.get('quantity', 1)
+        
+        threshold = int(os.environ.get('FREE_SHIPPING_THRESHOLD', '5000'))
+        shipping_cost = int(os.environ.get('SHIPPING_COST', '200'))
+        shipping = 0 if subtotal >= threshold else shipping_cost
+        total = subtotal + shipping
+        cart_count = sum(item.get('quantity', 1) for item in cart)
+        item_total = item_found.get('price', 0) * quantity
+        
+        app.logger.info(f"API: Updated cart item - {item_found.get('name')} x{quantity}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Cart updated',
+            'item_total': item_total,
+            'subtotal': subtotal,
+            'shipping': shipping,
+            'total': total,
+            'cart_count': cart_count
+        })
+        
+    except Exception as e:
+        app.logger.error(f"API Error updating cart: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to update cart',
+            'message': str(e)
+        }), 500
+
+
+# ------------------------------------------------------------------
+# API: Remove from Cart (AJAX)
+# ------------------------------------------------------------------
+@app.route('/api/cart/remove', methods=['POST'])
+def api_remove_from_cart():
+    """
+    API endpoint to remove item from cart via AJAX.
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
+        
+        product_id = str(data.get('product_id'))
+        
+        if not product_id:
+            return jsonify({
+                'success': False,
+                'error': 'Product ID required'
+            }), 400
+        
+        # Get current cart
+        cart = session.get('cart', [])
+        
+        # Remove item
+        removed_item = None
+        new_cart = []
+        for item in cart:
+            if str(item.get('id')) == product_id:
+                removed_item = item
+            else:
+                new_cart.append(item)
+        
+        if not removed_item:
+            return jsonify({
+                'success': False,
+                'error': 'Item not found in cart'
+            }), 404
+        
+        # Save cart
+        session['cart'] = new_cart
+        session.modified = True
+        
+        # Calculate new totals
+        subtotal = 0
+        for item in new_cart:
+            subtotal += item.get('price', 0) * item.get('quantity', 1)
+        
+        threshold = int(os.environ.get('FREE_SHIPPING_THRESHOLD', '5000'))
+        shipping_cost = int(os.environ.get('SHIPPING_COST', '200'))
+        shipping = 0 if subtotal >= threshold else shipping_cost
+        total = subtotal + shipping
+        cart_count = sum(item.get('quantity', 1) for item in new_cart)
+        
+        app.logger.info(f"API: Removed from cart - {removed_item.get('name')}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'{removed_item.get("name")} removed from cart',
+            'subtotal': subtotal,
+            'shipping': shipping,
+            'total': total,
+            'cart_count': cart_count
+        })
+        
+    except Exception as e:
+        app.logger.error(f"API Error removing from cart: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to remove from cart',
+            'message': str(e)
+        }), 500
+
+
+# ------------------------------------------------------------------
+# API: Get Categories (JSON)
+# ------------------------------------------------------------------
+@app.route('/api/categories')
+def api_categories():
+    """
+    API endpoint to get all product categories.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Get distinct categories from products
+        cursor.execute("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category != '' ORDER BY category")
+        categories_from_db = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        
+        # Default categories if none exist
+        default_categories = ['ሶፋ', 'አልጋ', 'መጅሊስ', 'መጋረጃ', 'ቁምሳጥን', 'ሌላ']
+        
+        # Use categories from DB if any, otherwise use defaults
+        categories = categories_from_db if categories_from_db else default_categories
+        
+        # Add 'all' option at the beginning
+        all_categories = ['all'] + categories
+        
+        return jsonify({
+            'success': True,
+            'categories': all_categories
+        })
+        
+    except Exception as e:
+        app.logger.error(f"API Error fetching categories: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch categories',
+            'message': str(e)
+        }), 500
+
+
+# ------------------------------------------------------------------
+# API: Get Cart Count (JSON)
+# ------------------------------------------------------------------
+@app.route('/api/cart/count')
+def api_cart_count():
+    """
+    API endpoint to get current cart item count.
+    Useful for updating cart badge dynamically.
+    """
+    try:
+        cart = session.get('cart', [])
+        cart_count = sum(item.get('quantity', 1) for item in cart)
+        
+        return jsonify({
+            'success': True,
+            'cart_count': cart_count
+        })
+        
+    except Exception as e:
+        app.logger.error(f"API Error fetching cart count: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch cart count',
+            'cart_count': 0
+        }), 500
+
+
+# ------------------------------------------------------------------
+# API: Search Products (JSON)
+# ------------------------------------------------------------------
+@app.route('/api/search')
+def api_search():
+    """
+    API endpoint to search products by name.
+    
+    Query Parameters:
+        q (str): Search query
+    """
+    try:
+        query = request.args.get('q', '').strip()
+        
+        if not query:
+            return jsonify({
+                'success': True,
+                'products': [],
+                'count': 0
+            })
+        
+        search_pattern = f'%{query}%'
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name_am, name_en, price, old_price, image, category 
+            FROM products 
+            WHERE name_am LIKE ? OR name_en LIKE ?
+            ORDER BY id DESC
+        """, (search_pattern, search_pattern))
+        
+        products = cursor.fetchall()
+        conn.close()
+        
+        products_list = []
+        for p in products:
+            image_url = url_for('static', filename=f'uploads/{p[5]}') if p[5] and p[5] != '' else ''
+            products_list.append({
+                'id': p[0],
+                'name_am': p[1],
+                'name_en': p[2],
+                'price': p[3],
+                'old_price': p[4] if len(p) > 4 else None,
+                'image': image_url,
+                'category': p[6] if len(p) > 6 else ''
+            })
+        
+        app.logger.info(f"API: Search performed - '{query}' found {len(products_list)} results")
+        
+        return jsonify({
+            'success': True,
+            'products': products_list,
+            'count': len(products_list),
+            'query': query
+        })
+        
+    except Exception as e:
+        app.logger.error(f"API Error searching: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to search products',
+            'message': str(e)
+        }), 500
+# ==================== 11. 📁 STATIC FILE ROUTES ====================
+
+# ------------------------------------------------------------------
+# Uploaded Files Route
+# ------------------------------------------------------------------
+@app.route('/static/uploads/<path:filename>')
+def serve_upload(filename): # ስሙን ከ uploaded_file ወደ serve_upload ቀይረው
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+#@app.route('/static/uploads/<path:filename>')
+#def uploaded_file(filename):
+    """
+    Serve uploaded files securely.
+    """
+    try:
+        if '..' in filename or filename.startswith('/'):
+            app.logger.warning(f"Potential directory traversal attempt: {filename}")
+            abort(404)
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    except FileNotFoundError:
+        app.logger.warning(f"File not found: {filename}")
+        abort(404)
+    except Exception as e:
+        app.logger.error(f"Error serving file {filename}: {str(e)}")
+        abort(500)
+
+
+# ------------------------------------------------------------------
+# Serve Product Images with Cache Control
+# ------------------------------------------------------------------
+@app.route('/static/uploads/products/<path:filename>')
+def uploaded_product_image(filename):
+    """
+    Serve product images with cache headers for better performance.
+    """
+    try:
+        if '..' in filename or filename.startswith('/'):
+            abort(404)
+        
+        response = send_from_directory(
+            os.path.join(app.config['UPLOAD_FOLDER'], 'products'), 
+            filename
+        )
+        response.headers['Cache-Control'] = 'public, max-age=86400'  # 24 hours
+        return response
+        
+    except FileNotFoundError:
+        return send_from_directory('static/images', 'placeholder.png')
+    except Exception as e:
+        app.logger.error(f"Error serving product image {filename}: {str(e)}")
+        abort(500)
+
+
+# ------------------------------------------------------------------
+# Serve Advertisement Media
+# ------------------------------------------------------------------
+@app.route('/static/uploads/ads/<path:filename>')
+def uploaded_ad_media(filename):
+    """
+    Serve advertisement media files (images/videos).
+    """
+    try:
+        if '..' in filename or filename.startswith('/'):
+            abort(404)
+        
+        response = send_from_directory(
+            os.path.join(app.config['UPLOAD_FOLDER'], 'ads'), 
+            filename
+        )
+        response.headers['Cache-Control'] = 'public, max-age=43200'  # 12 hours
+        return response
+        
+    except FileNotFoundError:
+        app.logger.warning(f"Ad media not found: {filename}")
+        abort(404)
+    except Exception as e:
+        app.logger.error(f"Error serving ad media {filename}: {str(e)}")
+        abort(500)
+
+
+# ------------------------------------------------------------------
+# Favicon Route
+# ------------------------------------------------------------------
+@app.route('/favicon.ico')
+def favicon():
+    """
+    Serve the website favicon.
+    """
+    try:
+        return send_from_directory(
+            os.path.join(app.root_path, 'static'), 
+            'favicon.ico', 
+            mimetype='image/vnd.microsoft.icon'
+        )
+    except FileNotFoundError:
+        return '', 204
+
+
+# ------------------------------------------------------------------
+# Serve Static Images with Optimization
+# ------------------------------------------------------------------
+@app.route('/static/images/<path:filename>')
+def static_image(filename):
+    """
+    Serve static images with cache optimization.
+    """
+    try:
+        if '..' in filename or filename.startswith('/'):
+            abort(404)
+        
+        response = send_from_directory('static/images', filename)
+        response.headers['Cache-Control'] = 'public, max-age=604800'  # 7 days
+        return response
+        
+    except FileNotFoundError:
+        return send_from_directory('static/images', 'placeholder.png')
+    except Exception as e:
+        app.logger.error(f"Error serving static image {filename}: {str(e)}")
+        abort(500)
+
+
+# ------------------------------------------------------------------
+# Serve CSS Files with Cache
+# ------------------------------------------------------------------
+@app.route('/static/css/<path:filename>')
+def static_css(filename):
+    """
+    Serve CSS files with cache headers.
+    """
+    try:
+        if '..' in filename:
+            abort(404)
+        
+        response = send_from_directory('static/css', filename)
+        response.headers['Cache-Control'] = 'public, max-age=3600'  # 1 hour
+        response.headers['Content-Type'] = 'text/css'
+        return response
+        
+    except FileNotFoundError:
+        abort(404)
+    except Exception as e:
+        app.logger.error(f"Error serving CSS {filename}: {str(e)}")
+        abort(500)
+
+
+# ------------------------------------------------------------------
+# Serve JavaScript Files with Cache
+# ------------------------------------------------------------------
+@app.route('/static/js/<path:filename>')
+def static_js(filename):
+    """
+    Serve JavaScript files with cache headers.
+    """
+    try:
+        if '..' in filename:
+            abort(404)
+        
+        response = send_from_directory('static/js', filename)
+        response.headers['Cache-Control'] = 'public, max-age=3600'  # 1 hour
+        response.headers['Content-Type'] = 'application/javascript'
+        return response
+        
+    except FileNotFoundError:
+        abort(404)
+    except Exception as e:
+        app.logger.error(f"Error serving JS {filename}: {str(e)}")
+        abort(500)
+
+
+# ==================== 12. 🔄 CONTEXT PROCESSORS ====================
+
+# ------------------------------------------------------------------
+# Global Context Processor
+# ------------------------------------------------------------------
+@app.context_processor
+def inject_globals():
+    """
+    Inject global variables into all templates.
+    """
+    lang = get_lang()
+    t = TEXTS.get(lang, TEXTS['am'])
+    
+    cart = session.get('cart', [])
+    cart_count = sum(item.get('quantity', 1) for item in cart)
+    
+    current_year = datetime.now().year
+    is_admin = session.get('admin', False)
+    app_name = "Ethiosadat Furniture"
+    whatsapp_number = os.environ.get('WHATSAPP_NUMBER', '251906020606')
+    
+    def _(key):
+        return get_text(key, lang)
+    
+    def get_cart_total():
+        total = 0
+        for item in session.get('cart', []):
+            total += item.get('price', 0) * item.get('quantity', 1)
+        return total
+    
+    def get_shipping_cost():
+        subtotal = get_cart_total()
+        threshold = int(os.environ.get('FREE_SHIPPING_THRESHOLD', '5000'))
+        cost = int(os.environ.get('SHIPPING_COST', '200'))
+        return 0 if subtotal >= threshold else cost
+    
+    def get_grand_total():
+        return get_cart_total() + get_shipping_cost()
+    
+    return {
+        'current_year': current_year,
+        'cart_count': cart_count,
+        'lang': lang,
+        't': t,
+        '_': _,
+        'is_admin': is_admin,
+        'app_name': app_name,
+        'whatsapp_number': whatsapp_number,
+        'request': request,
+        'get_cart_total': get_cart_total,
+        'get_shipping_cost': get_shipping_cost,
+        'get_grand_total': get_grand_total
+    }
+
+
+# ------------------------------------------------------------------
+# Template Filters
+# ------------------------------------------------------------------
+@app.template_filter('format_price')
+def format_price_filter(price):
+    """
+    Format price with thousand separators and ETB currency.
+    Usage: {{ product.price|format_price }}
+    """
+    try:
+        price_float = float(price)
+        return f"{price_float:,.0f}".replace(',', ',') + " ETB"
+    except (ValueError, TypeError):
+        return f"{price} ETB"
+
+
+@app.template_filter('format_number')
+def format_number_filter(price):
+    """
+    Format price as number only (without currency).
+    Usage: {{ product.price|format_number }}
+    """
+    try:
+        price_float = float(price)
+        return f"{price_float:,.0f}".replace(',', ',')
+    except (ValueError, TypeError):
+        return str(price)
+
+
+@app.template_filter('truncate')
+def truncate_filter(text, length=50):
+    """
+    Truncate text to specified length and add ellipsis.
+    Usage: {{ product.description|truncate(100) }}
+    """
+    if not text:
+        return ''
+    if len(text) <= length:
+        return text
+    return text[:length].rstrip() + '...'
+
+
+@app.template_filter('datetime')
+def datetime_filter(dt):
+    """
+    Format datetime for display.
+    Usage: {{ order.created_at|datetime }}
+    """
+    if not dt:
+        return ''
+    return dt.strftime('%Y-%m-%d %H:%M')
+
+
+@app.template_filter('discount')
+def discount_filter(price, old_price):
+    """
+    Calculate discount percentage.
+    Usage: {{ product.price|discount(product.old_price) }}
+    """
+    try:
+        current = float(price)
+        original = float(old_price) if old_price else 0
+        if original > 0 and current < original:
+            return int(((original - current) / original) * 100)
+        return 0
+    except (ValueError, TypeError):
+        return 0
+
+
+@app.template_filter('format_date')
+def format_date_filter(date_obj, format_type='short'):
+    """
+    Format date for display.
+    Usage: {{ product.created_at|format_date('long') }}
+    """
+    if not date_obj:
+        return ''
+    
+    if format_type == 'short':
+        return date_obj.strftime('%d/%m/%Y')
+    elif format_type == 'long':
+        return date_obj.strftime('%B %d, %Y')
+    else:
+        return date_obj.strftime('%Y-%m-%d %H:%M:%S')
+
+
+@app.template_filter('nl2br')
+def nl2br_filter(text):
+    """
+    Convert newlines to HTML line breaks.
+    Usage: {{ product.description|nl2br }}
+    """
+    if not text:
+        return ''
+    return text.replace('\n', '<br>')
+
+
+@app.template_filter('default')
+def default_filter(value, default_value=''):
+    """
+    Return default value if the primary value is empty/None.
+    Usage: {{ product.old_price|default('No discount') }}
+    """
+    if value is None or value == '':
+        return default_value
+    return value
+
+
+# ==================== ADDITIONAL FILTERS ====================
+
+@app.template_filter('currency_symbol')
+def currency_symbol_filter(price):
+    """Return only the currency symbol (ETB)."""
+    return "ETB"
+
+
+@app.template_filter('safe_text')
+def safe_text_filter(text):
+    """Escape HTML special characters for safe display."""
+    if not text:
+        return ''
+    import html
+    return html.escape(str(text))
+
+
+@app.template_filter('from_json')
+def from_json_filter(json_str):
+    """Parse JSON string to Python object."""
+    if not json_str:
+        return []
+    try:
+        return json.loads(json_str)
+    except:
+        return []
+
+
+@app.template_filter('to_json')
+def to_json_filter(obj):
+    """Convert Python object to JSON string."""
+    try:
+        return json.dumps(obj)
+    except:
+        return '{}'
+
+
+@app.template_filter('slugify')
+def slugify_filter(text):
+    """Convert text to URL-friendly slug."""
+    if not text:
+        return ''
+    from utils.helpers import slugify
+    return slugify(text)
+# ==================== 13. 🖥️ CLI COMMANDS ====================
+
+# ------------------------------------------------------------------
+# Command Line Interface for Application Management
+# ------------------------------------------------------------------
+
+@app.cli.command('init-db')
+def init_db_command():
+    """Initialize the database with all required tables."""
+    import sqlite3
+    
+    db_path = Config.DATABASE_PATH if hasattr(Config, 'DATABASE_PATH') else 'ethiosadat.db'
+    
+    print(f"📦 Initializing database at: {db_path}")
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Products table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name_am TEXT NOT NULL,
+            name_en TEXT NOT NULL,
+            price TEXT NOT NULL,
+            old_price TEXT,
+            image TEXT,
+            category TEXT
+        )
+    ''')
+    print("✅ Products table created")
+    
+    # Ads table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT NOT NULL,
+            media TEXT
+        )
+    ''')
+    print("✅ Ads table created")
+    
+    # Orders table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_number TEXT UNIQUE,
+            customer_name TEXT NOT NULL,
+            customer_phone TEXT NOT NULL,
+            customer_address TEXT,
+            customer_email TEXT,
+            items TEXT,
+            subtotal REAL,
+            shipping_cost REAL,
+            total REAL,
+            status TEXT DEFAULT 'pending',
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    print("✅ Orders table created")
+    
+    # Settings table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            key TEXT UNIQUE NOT NULL,
+            value TEXT
+        )
+    ''')
+    print("✅ Settings table created")
+    
+    # Insert default settings if not exists
+    default_settings = [
+        ('whatsapp_number', '251906020606'),
+        ('free_shipping_threshold', '5000'),
+        ('shipping_cost', '200'),
+        ('site_name', 'Ethiosadat Furniture'),
+        ('site_email', 'info@ethiosadat.com')
+    ]
+    
+    for key, value in default_settings:
+        cursor.execute('''
+            INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)
+        ''', (key, value))
+    
+    conn.commit()
+    conn.close()
+    
+    print("🎉 Database initialization complete!")
+
+
+@app.cli.command('seed-demo')
+def seed_demo_data():
+    """Seed the database with demo products."""
+    import sqlite3
+    
+    db_path = Config.DATABASE_PATH if hasattr(Config, 'DATABASE_PATH') else 'ethiosadat.db'
+    
+    print("🌱 Seeding demo data...")
+    
+    demo_products = [
+        {
+            'name_am': 'ምቹ ሶፋ',
+            'name_en': 'Comfort Sofa',
+            'price': '12500',
+            'old_price': '15000',
+            'category': 'ሶፋ',
+            'image': 'demo_sofa1.jpg'
+        },
+        {
+            'name_am': 'ዘመናዊ አልጋ',
+            'name_en': 'Modern Bed',
+            'price': '18500',
+            'old_price': '22000',
+            'category': 'አልጋ',
+            'image': 'demo_bed1.jpg'
+        },
+        {
+            'name_am': 'የቅንጦት መጅሊስ',
+            'name_en': 'Luxury Mejlis',
+            'price': '22500',
+            'old_price': '28000',
+            'category': 'መጅሊስ',
+            'image': 'demo_mejlis1.jpg'
+        },
+        {
+            'name_am': 'ዘመናዊ መጋረጃ',
+            'name_en': 'Modern Curtain',
+            'price': '3500',
+            'old_price': '4500',
+            'category': 'መጋረጃ',
+            'image': 'demo_curtain1.jpg'
+        },
+        {
+            'name_am': 'ትልቅ ቁምሳጥን',
+            'name_en': 'Large Wardrobe',
+            'price': '15500',
+            'old_price': '19000',
+            'category': 'ቁምሳጥን',
+            'image': 'demo_wardrobe1.jpg'
+        }
+    ]
+    
+    demo_ads = [
+        {
+            'text': 'ልዩ ቅናሽ! 20% ቅናሽ በሁሉም ምርቶች ላይ',
+            'media': ''
+        },
+        {
+            'text': 'ነጻ ማጓጓዝ በ5000 ብር እና ከዚያ በላይ ግዢዎች',
+            'media': ''
+        },
+        {
+            'text': 'አዲስ ደረሰ! ዘመናዊ የቤት ዕቃዎች',
+            'media': ''
+        }
+    ]
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Check if products already exist
+    cursor.execute("SELECT COUNT(*) FROM products")
+    product_count = cursor.fetchone()[0]
+    
+    if product_count == 0:
+        for product in demo_products:
+            cursor.execute('''
+                INSERT INTO products (name_am, name_en, price, old_price, category, image)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (product['name_am'], product['name_en'], product['price'], 
+                  product['old_price'], product['category'], product['image']))
+        print(f"✅ Added {len(demo_products)} demo products")
+    else:
+        print(f"ℹ️ Products already exist ({product_count} products), skipping demo products")
+    
+    # Check if ads already exist
+    cursor.execute("SELECT COUNT(*) FROM ads")
+    ad_count = cursor.fetchone()[0]
+    
+    if ad_count == 0:
+        for ad in demo_ads:
+            cursor.execute('INSERT INTO ads (text, media) VALUES (?, ?)', (ad['text'], ad['media']))
+        print(f"✅ Added {len(demo_ads)} demo ads")
+    else:
+        print(f"ℹ️ Ads already exist ({ad_count} ads), skipping demo ads")
+    
+    conn.commit()
+    conn.close()
+    
+    print("🎉 Demo data seeding complete!")
+
+
+@app.cli.command('list-products')
+def list_products():
+    """List all products in the database."""
+    import sqlite3
+    
+    db_path = Config.DATABASE_PATH if hasattr(Config, 'DATABASE_PATH') else 'ethiosadat.db'
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name_am, name_en, price, category FROM products ORDER BY id")
+    products = cursor.fetchall()
+    conn.close()
+    
+    if not products:
+        print("📭 No products found in database.")
+        return
+    
+    print("\n" + "=" * 80)
+    print(f"{'ID':<5} {'Name (Amharic)':<25} {'Name (English)':<20} {'Price':<12} {'Category':<15}")
+    print("-" * 80)
+    
+    for product in products:
+        print(f"{product[0]:<5} {product[1][:24]:<25} {product[2][:19]:<20} {product[3]:<12} {product[4][:14]:<15}")
+    
+    print("=" * 80)
+    print(f"Total products: {len(products)}")
+
+
+@app.cli.command('list-ads')
+def list_ads():
+    """List all advertisements."""
+    import sqlite3
+    
+    db_path = Config.DATABASE_PATH if hasattr(Config, 'DATABASE_PATH') else 'ethiosadat.db'
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, text, media FROM ads ORDER BY id")
+    ads = cursor.fetchall()
+    conn.close()
+    
+    if not ads:
+        print("📭 No advertisements found.")
+        return
+    
+    print("\n" + "=" * 80)
+    print(f"{'ID':<5} {'Text':<50} {'Media':<20}")
+    print("-" * 80)
+    
+    for ad in ads:
+        text_preview = ad[1][:47] + "..." if len(ad[1]) > 50 else ad[1]
+        media_status = "Has media" if ad[2] else "No media"
+        print(f"{ad[0]:<5} {text_preview:<50} {media_status:<20}")
+    
+    print("=" * 80)
+    print(f"Total ads: {len(ads)}")
+
+
+@app.cli.command('clear-cache')
+def clear_cache():
+    """Clear cached data (temporary files, etc.)."""
+    import shutil
+    
+    cache_dirs = ['logs', 'static/uploads/temp']
+    deleted_count = 0
+    
+    print("🧹 Clearing cache...")
+    
+    for cache_dir in cache_dirs:
+        if os.path.exists(cache_dir):
+            for filename in os.listdir(cache_dir):
+                file_path = os.path.join(cache_dir, filename)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                        deleted_count += 1
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                        deleted_count += 1
+                except Exception as e:
+                    print(f"⚠️ Error deleting {file_path}: {e}")
+    
+    print(f"✅ Cache cleared! Deleted {deleted_count} items.")
+
+
+@app.cli.command('backup-db')
+def backup_database():
+    """Create a backup of the database."""
+    import shutil
+    from datetime import datetime
+    
+    db_path = Config.DATABASE_PATH if hasattr(Config, 'DATABASE_PATH') else 'ethiosadat.db'
+    
+    if not os.path.exists(db_path):
+        print("❌ Database file not found!")
+        return
+    
+    # Create backup directory if not exists
+    backup_dir = 'backups'
+    os.makedirs(backup_dir, exist_ok=True)
+    
+    # Generate backup filename with timestamp
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    backup_filename = f"ethiosadat_backup_{timestamp}.db"
+    backup_path = os.path.join(backup_dir, backup_filename)
+    
+    # Copy database file
+    shutil.copy2(db_path, backup_path)
+    
+    # Get file size
+    size_bytes = os.path.getsize(backup_path)
+    size_kb = size_bytes / 1024
+    
+    print(f"✅ Database backup created successfully!")
+    print(f"   📁 Location: {backup_path}")
+    print(f"   📊 Size: {size_kb:.2f} KB")
+    print(f"   🕐 Time: {timestamp}")
+
+
+@app.cli.command('show-stats')
+def show_stats():
+    """Show database statistics."""
+    import sqlite3
+    
+    db_path = Config.DATABASE_PATH if hasattr(Config, 'DATABASE_PATH') else 'ethiosadat.db'
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Get counts
+    cursor.execute("SELECT COUNT(*) FROM products")
+    product_count = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM ads")
+    ad_count = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM orders")
+    order_count = cursor.fetchone()[0]
+    
+    # Get revenue
+    cursor.execute("SELECT SUM(total) FROM orders WHERE status = 'delivered'")
+    revenue = cursor.fetchone()[0] or 0
+    
+    # Get pending orders
+    cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'pending'")
+    pending_orders = cursor.fetchone()[0]
+    
+    # Get categories
+    cursor.execute("SELECT COUNT(DISTINCT category) FROM products WHERE category IS NOT NULL")
+    category_count = cursor.fetchone()[0]
+    
+    conn.close()
+    
+    print("\n" + "=" * 50)
+    print("📊 ETHIOSADAT DATABASE STATISTICS")
+    print("=" * 50)
+    print(f"📦 Products:          {product_count}")
+    print(f"📢 Advertisements:    {ad_count}")
+    print(f"🛒 Orders:            {order_count}")
+    print(f"💰 Total Revenue:     {revenue:,.0f} ETB")
+    print(f"⏳ Pending Orders:    {pending_orders}")
+    print(f"🏷️  Categories:        {category_count}")
+    print("=" * 50)
+
+
+@app.cli.command('create-admin')
+def create_admin():
+    """Create or update admin password (interactive)."""
+    import getpass
+    
+    print("\n🔐 Admin Setup")
+    print("-" * 30)
+    
+    # Get new admin password
+    password = getpass.getpass("Enter admin password (min 4 characters): ")
+    
+    if len(password) < 4:
+        print("❌ Password must be at least 4 characters!")
+        return
+    
+    confirm = getpass.getpass("Confirm admin password: ")
+    
+    if password != confirm:
+        print("❌ Passwords do not match!")
+        return
+    
+    # Update .env or set environment variable
+    env_file = '.env'
+    
+    if os.path.exists(env_file):
+        # Update existing .env file
+        with open(env_file, 'r') as f:
+            lines = f.readlines()
+        
+        admin_updated = False
+        with open(env_file, 'w') as f:
+            for line in lines:
+                if line.startswith('ADMIN_PASSWORD='):
+                    f.write(f'ADMIN_PASSWORD={password}\n')
+                    admin_updated = True
+                else:
+                    f.write(line)
+            
+            if not admin_updated:
+                f.write(f'\nADMIN_PASSWORD={password}\n')
+        
+        print("✅ Admin password updated in .env file!")
+    else:
+        # Create new .env file
+        with open(env_file, 'w') as f:
+            f.write(f'ADMIN_PASSWORD={password}\n')
+            f.write('SECRET_KEY=ethiosadat_default_secret_key_2026\n')
+        print("✅ .env file created with admin password!")
+    
+    print("ℹ️  Please restart the application for changes to take effect.")
+
+
+# ==================== 14. 🚀 MAIN ENTRY POINT ====================
+
+def create_app():
+    """Application factory pattern for creating the Flask app."""
+    return app
+
+
+def main():
+    """Main entry point for running the application."""
+    
+    # Parse command line arguments for direct execution
+    if len(sys.argv) > 1 and sys.argv[1] == 'init-db':
+        init_db_command()
+        return
+    
+    if len(sys.argv) > 1 and sys.argv[1] == 'seed':
+        seed_demo_data()
+        return
+    
+    # Get configuration from environment
+    debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    port = int(os.environ.get('PORT', 5000))
+    host = os.environ.get('HOST', '0.0.0.0')
+    
+    # Print startup banner
+    print("\n" + "=" * 60)
+    print("🪑 ETHIOSADAT FURNITURE STORE")
+    print("=" * 60)
+    print(f"🚀 Starting application...")
+    print(f"📍 Host: {host}")
+    print(f"🔌 Port: {port}")
+    print(f"🐛 Debug Mode: {debug}")
+    print(f"🌐 Language: {DEFAULT_LANGUAGE}")
+    print("=" * 60)
+    print("\n💡 Admin Panel Access:")
+    print(f"   ➜ URL: http://{host}:{port}/login")
+    print(f"   ➜ Password: {ADMIN_PASSWORD if ADMIN_PASSWORD != '1234' else '1234 (default)'}")
+    print("\n📞 Customer WhatsApp:")
+    print(f"   ➜ Number: {WHATSAPP_NUMBER}")
+    print("\n" + "=" * 60)
+    print("✅ Server is ready! Press CTRL+C to stop.")
+    print("=" * 60 + "\n")
+    
+    # Run the Flask application
+    app.run(host=host, port=port, debug=debug)
+
+
+# ------------------------------------------------------------------
+# WSGI Entry Point (for production servers like gunicorn)
+# ------------------------------------------------------------------
+# The 'app' variable is the WSGI callable
+# For production: gunicorn -w 4 -b 0.0.0.0:8000 'app:app'
+
+# ------------------------------------------------------------------
+# Development Server Entry Point
+# ------------------------------------------------------------------
+if __name__ == '__main__':
+    # Prompt for commands if run directly
+    if len(sys.argv) <= 1 or sys.argv[1] not in ['init-db', 'seed']:
+        # Check if database exists
+        db_path = Config.DATABASE_PATH if hasattr(Config, 'DATABASE_PATH') else 'ethiosadat.db'
+        if not os.path.exists(db_path):
+            print("⚠️  Database not found! Running initialization...")
+            init_db_command()
+            print()
+            seed_demo_data()
+            print()
+    
+    main()
+
+
+# ==================== 15. 🔧 ADDITIONAL UTILITIES ====================
+
+# ------------------------------------------------------------------
+# Application Shutdown Handler
+# ------------------------------------------------------------------
+import atexit
+
+def shutdown_handler():
+    """Cleanup operations when the application shuts down."""
+    app.logger.info("🛑 Application shutting down...")
+    
+    # Save any pending data
+    try:
+        # Clear expired sessions if needed
+        pass
+    except Exception as e:
+        app.logger.error(f"Error during shutdown: {e}")
+
+atexit.register(shutdown_handler)
+
+
+# ------------------------------------------------------------------
+# Before First Request Handler
+# ------------------------------------------------------------------
+@app.before_first_request
+def before_first_request():
+    """Execute before the first request is processed."""
+    from flask import Flask
+    
+    # Initialize database if needed
+    db_path = Config.DATABASE_PATH if hasattr(Config, 'DATABASE_PATH') else 'ethiosadat.db'
+    if not os.path.exists(db_path):
+        app.logger.info("Database not found. Initializing...")
+        init_db_command()
+        
+        # Check if any products exist, if not seed demo data
+        try:
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM products")
+            count = cursor.fetchone()[0]
+            conn.close()
+            
+            if count == 0:
+                app.logger.info("No products found. Seeding demo data...")
+                seed_demo_data()
+        except Exception as e:
+            app.logger.error(f"Error checking products: {e}")
+    
+    app.logger.info("🎉 Ethiosadat Furniture Store is ready!")
+
+
+# ------------------------------------------------------------------
+# After Request Handler (for security headers)
+# ------------------------------------------------------------------
+@app.after_request
+def add_security_headers(response):
+    """
+    Add security headers to all responses.
+    """
+    # Prevent MIME type sniffing
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    
+    # Enable XSS protection
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    
+    # Control referrer information
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    
+    # Only allow same-origin framing
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    
+    return response
+
+
+# ------------------------------------------------------------------
+# Request Logger
+# ------------------------------------------------------------------
+@app.before_request
+def log_request_info():
+    """Log incoming requests for debugging."""
+    if request.method in ['POST', 'PUT', 'DELETE']:
+        app.logger.debug(f"📥 {request.method} {request.path} - IP: {request.remote_addr}")
+    
+    # Log slow requests
+    import time
+    request.start_time = time.time()
+
+
+@app.after_request
+def log_response_info(response):
+    """Log response time for debugging slow requests."""
+    if hasattr(request, 'start_time'):
+        elapsed = time.time() - request.start_time
+        if elapsed > 1.0:  # Log requests that take more than 1 second
+            app.logger.warning(f"⚠️ Slow request: {request.method} {request.path} - {elapsed:.2f}s")
+    return response
+
+
+# ------------------------------------------------------------------
+# Health Check Endpoint (for monitoring)
+# ------------------------------------------------------------------
+@app.route('/health')
+def health_check():
+    """
+    Health check endpoint for monitoring services.
+    Used by load balancers and monitoring tools.
+    """
+    import sqlite3
+    
+    health_status = {
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'version': '1.0.0',
+        'services': {}
+    }
+    
+    # Check database connectivity
+    try:
+        db_path = Config.DATABASE_PATH if hasattr(Config, 'DATABASE_PATH') else 'ethiosadat.db'
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        conn.close()
+        health_status['services']['database'] = 'connected'
+    except Exception as e:
+        health_status['services']['database'] = 'error'
+        health_status['status'] = 'unhealthy'
+    
+    # Check storage
+    try:
+        upload_dir = app.config['UPLOAD_FOLDER']
+        if os.path.exists(upload_dir):
+            health_status['services']['storage'] = 'accessible'
+        else:
+            health_status['services']['storage'] = 'not_found'
+    except Exception as e:
+        health_status['services']['storage'] = 'error'
+    
+    status_code = 200 if health_status['status'] == 'healthy' else 503
+    return jsonify(health_status), status_code
+
+
+# ------------------------------------------------------------------
+# Maintenance Mode Middleware (optional)
+# ------------------------------------------------------------------
+MAINTENANCE_MODE = os.environ.get('MAINTENANCE_MODE', 'False').lower() == 'true'
+
+@app.before_request
+def check_maintenance_mode():
+    """Put the application in maintenance mode."""
+    if MAINTENANCE_MODE:
+        # Allow admin access to /admin* routes
+        if request.path.startswith('/admin') or request.path == '/login':
+            return None
+        
+        # Allow static files
+        if request.path.startswith('/static'):
+            return None
+        
+        # Allow health check
+        if request.path == '/health':
+            return None
+        
+        # Show maintenance page
+        lang = get_lang()
+        if lang == 'en':
+            title = 'Under Maintenance'
+            message = 'We are currently performing maintenance. Please check back soon.'
+        else:
+            title = 'በማሻሻል ላይ'
+            message = 'በአሁን ሰዓት ማሻሻያ እየተደረገ ነው። እባክዎ ቆይተው ይመለሱ።'
+        
+        return f'''
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="UTF-8"><title>503 - {title}</title>
+        <style>
+            *{{margin:0;padding:0;box-sizing:border-box;}}
+            body{{font-family:Arial, sans-serif;background:linear-gradient(135deg,#1a73e8,#0d47a1);display:flex;justify-content:center;align-items:center;height:100vh;}}
+            .box{{background:white;padding:40px;border-radius:20px;text-align:center;max-width:400px;}}
+            h1{{color:#1a73e8;font-size:48px;margin:0 0 20px 0;}}
+            p{{margin:20px 0;color:#666;}}
+            .spinner{{width:40px;height:40px;margin:20px auto;border:4px solid #f3f3f3;border-top:4px solid #1a73e8;border-radius:50%;animation:spin 1s linear infinite;}}
+            @keyframes spin{{0%{{transform:rotate(0deg);}}100%{{transform:rotate(360deg);}}}}
+        </style>
+        </head>
+        <body><div class="box"><div class="spinner"></div><h1>{title}</h1><p>{message}</p></div></body>
+        </html>
+        ''', 503
+
+# ==================== END OF APPLICATION FILE ====================
+# Price formatter filter
+def format_price_number(value):
+    try:
+        if isinstance(value, (int, float)):
+            return f"{value:,.0f}"
+        num = float(value)
+        return f"{num:,.0f}"
+    except (ValueError, TypeError):
+        return str(value)
+
+app.jinja_env.filters["format_price_number"] = format_price_number
