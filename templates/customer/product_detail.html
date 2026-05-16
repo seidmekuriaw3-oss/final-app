@@ -280,18 +280,39 @@
             
             <!-- Price -->
             <div class="product-price">
-                <span class="current-price">{{ format_price(product.price) }}</span>
-                {% if product.compare_price and product.compare_price|float > product.price|float %}
-                    <span class="old-price">{{ format_price(product.compare_price) }}</span>
-                    {% set discount = ((product.compare_price|float - product.price|float) / product.compare_price|float * 100)|round|int %}
-                    <span class="discount-badge">-{{ discount }}%</span>
+                {% if is_logged_in %}
+                    <span class="current-price" style="color:#1a73e8;">{{ format_price(final_price) }}</span>
+                    <span class="old-price">{{ format_price(product.price) }}</span>
+                    <span class="discount-badge" style="background:linear-gradient(135deg,#4caf50,#388e3c);">-10%</span>
+                {% else %}
+                    <span class="current-price">{{ format_price(product.price) }}</span>
+                    {% if product.compare_price and product.compare_price|float > product.price|float %}
+                        <span class="old-price">{{ format_price(product.compare_price) }}</span>
+                        {% set pdiscount = ((product.compare_price|float - product.price|float) / product.compare_price|float * 100)|round|int %}
+                        <span class="discount-badge">-{{ pdiscount }}%</span>
+                    {% endif %}
                 {% endif %}
             </div>
-            
-            <!-- Discount for logged in users -->
+
+            <!-- Member discount banner -->
             {% if is_logged_in %}
-            <div style="margin: 10px 0; padding: 8px 12px; background: #e8f5e9; border-radius: 10px; color: #4caf50; font-size: 14px;">
-                🎉 10% discount applied for members! Final price: {{ format_price(final_price) }}
+            <div style="margin:12px 0;padding:12px 16px;background:linear-gradient(135deg,#e8f5e9,#f1f8e9);border-radius:14px;border-left:4px solid #4caf50;display:flex;align-items:center;gap:10px;">
+                <span style="font-size:22px;">🏷️</span>
+                <div>
+                    <div style="font-weight:800;font-size:14px;color:#2e7d32;">Member Price — 10% Off!</div>
+                    <div style="font-size:12px;color:#555;margin-top:2px;">
+                        You save <strong>{{ format_price(product.price|float - final_price|float) }}</strong> as a registered member
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div style="margin:12px 0;padding:10px 14px;background:#fff8e1;border-radius:12px;border-left:4px solid #ffc107;display:flex;align-items:center;gap:10px;">
+                <span style="font-size:18px;">🔓</span>
+                <div style="font-size:13px;color:#555;">
+                    <a href="/login" style="color:#1a73e8;font-weight:700;text-decoration:none;">Login</a> or
+                    <a href="/register" style="color:#1a73e8;font-weight:700;text-decoration:none;">Register</a>
+                    to get <strong style="color:#f59e0b;">10% off</strong> this product!
+                </div>
             </div>
             {% endif %}
             

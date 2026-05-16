@@ -552,12 +552,32 @@
         grid.innerHTML = pageProducts.map(product => {
             const hasImage = product.thumbnail && product.thumbnail != 'None' && product.thumbnail.trim() != '';
             const imageUrl = hasImage ? `{{ url_for('static', filename='') }}${product.thumbnail}` : '';
-            const discountHtml = (product.compare_price && parseFloat(product.compare_price) > parseFloat(product.price)) ?
-                `<span class="discount-badge">-${Math.round((parseFloat(product.compare_price) - parseFloat(product.price)) / parseFloat(product.compare_price) * 100)}%</span>` : '';
-            
+            const IS_MEMBER = {{ 'true' if session.get('user_id') else 'false' }};
+            const baseP = parseFloat(product.price);
+            const memberP = IS_MEMBER ? Math.round(baseP * 0.9 * 100) / 100 : baseP;
+            const displayP = memberP;
+
+            // Discount badge: member-10% takes priority over compare_price discount
+            let discountHtml = '';
+            if (IS_MEMBER) {
+                discountHtml = `<span class="discount-badge" style="background:linear-gradient(135deg,#4caf50,#388e3c);position:absolute;top:10px;right:10px;z-index:2;padding:4px 9px;border-radius:20px;font-size:11px;font-weight:700;color:white;">-10%</span>`;
+            } else if (product.compare_price && parseFloat(product.compare_price) > baseP) {
+                const pct = Math.round((parseFloat(product.compare_price) - baseP) / parseFloat(product.compare_price) * 100);
+                discountHtml = `<span class="discount-badge" style="position:absolute;top:10px;right:10px;z-index:2;padding:4px 9px;border-radius:20px;font-size:11px;font-weight:700;color:white;background:#f44336;">-${pct}%</span>`;
+            }
+
+            const oldPriceHtml = IS_MEMBER
+                ? `<span class="old-price">${formatPriceNumber(baseP)} ETB</span>`
+                : (product.compare_price && parseFloat(product.compare_price) > baseP
+                    ? `<span class="old-price">${formatPriceNumber(product.compare_price)} ETB</span>` : '');
+
+            const memberBadge = IS_MEMBER
+                ? `<div style="margin-top:4px;font-size:10px;color:#2e7d32;font-weight:700;background:#e8f5e9;border-radius:6px;padding:2px 7px;display:inline-block;">🏷️ Member Price</div>`
+                : `<div style="margin-top:4px;font-size:10px;color:#f59e0b;background:#fff8e1;border-radius:6px;padding:2px 7px;display:inline-block;">🔓 Login for 10% off</div>`;
+
             return `
             <div class="product-card" onclick="location.href='{{ url_for('customer.product_detail', product_id=0) }}'.replace('/0', '/' + ${product.id})">
-                <div class="product-image">
+                <div class="product-image" style="position:relative;">
                     ${hasImage ? 
                         `<img src="${imageUrl}" alt="${escapeHtml(product.name_am)}" loading="lazy"
                              onerror="this.onerror=null; this.parentElement.innerHTML='<div style=\'font-size:48px;\'>🪑</div>'">` :
@@ -572,12 +592,11 @@
                         <span style="color: var(--text-muted, #999); font-size: 11px;">(${product.reviews || 0})</span>
                     </div>
                     <div class="product-price">
-                        <span class="current-price">${formatPriceNumber(product.price)} ETB</span>
-                        ${product.compare_price && parseFloat(product.compare_price) > parseFloat(product.price) ? 
-                            `<span class="old-price">${formatPriceNumber(product.compare_price)} ETB</span>` : ''
-                        }
+                        <span class="current-price">${formatPriceNumber(displayP)} ETB</span>
+                        ${oldPriceHtml}
                     </div>
-                    <button class="btn-add-to-cart" onclick="event.stopPropagation(); if(window.addToCart) addToCart('${product.id}', 1, this)" ${(product.stock_quantity || 0) === 0 ? 'disabled' : ''}>
+                    ${memberBadge}
+                    <button class="btn-add-to-cart" style="margin-top:10px;" onclick="event.stopPropagation(); if(window.addToCart) addToCart('${product.id}', 1, this)" ${(product.stock_quantity || 0) === 0 ? 'disabled' : ''}>
                         🛒 Add to Cart
                     </button>
                 </div>

@@ -217,20 +217,23 @@
         
         <!-- Price -->
         <div class="product-price" style="margin: 8px 0;">
-            <span class="current-price" style="
-                font-size: 20px;
-                font-weight: bold;
-                color: #1a73e8;
-            ">{{ format_price(product.price) }}</span>
-            {% if compare_price > price %}
-            <span class="old-price" style="
-                text-decoration: line-through;
-                color: var(--text-muted, #999);
-                font-size: 13px;
-                margin-left: 8px;
-            ">{{ format_price(product.compare_price) }}</span>
+            {% if session.get('user_id') %}
+                {% set member_price = (product.price|float * 0.9)|round(2) %}
+                <span class="current-price" style="font-size:20px;font-weight:bold;color:#1a73e8;">{{ format_price(member_price) }}</span>
+                <span class="old-price" style="text-decoration:line-through;color:var(--text-muted,#999);font-size:13px;margin-left:8px;">{{ format_price(product.price) }}</span>
+                <span style="background:linear-gradient(135deg,#4caf50,#388e3c);color:white;border-radius:20px;font-size:10px;font-weight:800;padding:2px 8px;margin-left:4px;">-10%</span>
+            {% else %}
+                <span class="current-price" style="font-size:20px;font-weight:bold;color:#1a73e8;">{{ format_price(product.price) }}</span>
+                {% if compare_price > price %}
+                <span class="old-price" style="text-decoration:line-through;color:var(--text-muted,#999);font-size:13px;margin-left:8px;">{{ format_price(product.compare_price) }}</span>
+                {% endif %}
             {% endif %}
         </div>
+        {% if not session.get('user_id') %}
+        <div style="font-size:10px;color:#f59e0b;background:#fff8e1;border-radius:6px;padding:2px 7px;margin-bottom:6px;display:inline-block;">🔓 Login for 10% off</div>
+        {% else %}
+        <div style="font-size:10px;color:#2e7d32;font-weight:700;background:#e8f5e9;border-radius:6px;padding:2px 7px;margin-bottom:6px;display:inline-block;">🏷️ Member Price</div>
+        {% endif %}
         
         <!-- Add to Cart Button -->
         {% if show_add_to_cart and stock > 0 %}

@@ -380,19 +380,53 @@
         
         if (categoryEl) categoryEl.textContent = product.category_name || 'Uncategorized';
         if (nameEl) nameEl.textContent = product.name_am || product.name;
-        if (priceEl) priceEl.textContent = formatPriceNumber(product.price) + ' ETB';
-        
-        // Old price and discount
-        if (product.compare_price && product.compare_price > product.price) {
-            if (oldPriceEl) oldPriceEl.textContent = formatPriceNumber(product.compare_price) + ' ETB';
-            const discount = Math.round(((product.compare_price - product.price) / product.compare_price) * 100);
-            if (discountEl) {
-                discountEl.textContent = `-${discount}%`;
-                discountEl.style.display = 'inline-block';
+
+        // Member discount: if logged in apply 10%
+        const isLoggedIn = {{ 'true' if session.get('user_id') else 'false' }};
+        const basePrice = parseFloat(product.price);
+        const memberPrice = isLoggedIn ? Math.round(basePrice * 0.9 * 100) / 100 : basePrice;
+
+        if (priceEl) priceEl.textContent = formatPriceNumber(memberPrice) + ' ETB';
+
+        // Show original price as strikethrough when member discount applies
+        if (isLoggedIn) {
+            if (oldPriceEl) { oldPriceEl.textContent = formatPriceNumber(basePrice) + ' ETB'; }
+            if (discountEl) { discountEl.textContent = '-10%'; discountEl.style.display = 'inline-block'; discountEl.style.background = 'linear-gradient(135deg,#4caf50,#388e3c)'; }
+            // Member badge
+            let mb = document.getElementById('modalMemberBadge');
+            if (!mb) {
+                mb = document.createElement('div');
+                mb.id = 'modalMemberBadge';
+                mb.style.cssText = 'margin:8px 0;padding:8px 12px;background:linear-gradient(135deg,#e8f5e9,#f1f8e9);border-radius:10px;border-left:4px solid #4caf50;font-size:12px;color:#2e7d32;font-weight:700;';
+                mb.innerHTML = '🏷️ Member Price — You save ' + formatPriceNumber(basePrice - memberPrice) + ' ETB!';
+                const priceBox = priceEl ? priceEl.closest('.product-price') : null;
+                if (priceBox) priceBox.after(mb);
+            } else {
+                mb.innerHTML = '🏷️ Member Price — You save ' + formatPriceNumber(basePrice - memberPrice) + ' ETB!';
+                mb.style.display = 'block';
             }
         } else {
-            if (oldPriceEl) oldPriceEl.textContent = '';
-            if (discountEl) discountEl.style.display = 'none';
+            // Old product compare_price discount
+            if (product.compare_price && product.compare_price > product.price) {
+                if (oldPriceEl) oldPriceEl.textContent = formatPriceNumber(product.compare_price) + ' ETB';
+                const discount = Math.round(((product.compare_price - product.price) / product.compare_price) * 100);
+                if (discountEl) { discountEl.textContent = `-${discount}%`; discountEl.style.display = 'inline-block'; }
+            } else {
+                if (oldPriceEl) oldPriceEl.textContent = '';
+                if (discountEl) discountEl.style.display = 'none';
+            }
+            // Login nudge in modal
+            let mb = document.getElementById('modalMemberBadge');
+            if (!mb) {
+                mb = document.createElement('div');
+                mb.id = 'modalMemberBadge';
+                mb.style.cssText = 'margin:8px 0;padding:8px 12px;background:#fff8e1;border-radius:10px;border-left:4px solid #ffc107;font-size:12px;color:#555;';
+                mb.innerHTML = '🔓 <a href="/login" style="color:#1a73e8;font-weight:700;">Login</a> to get <strong style="color:#f59e0b;">10% off</strong>!';
+                const priceBox = priceEl ? priceEl.closest('.product-price') : null;
+                if (priceBox) priceBox.after(mb);
+            } else {
+                mb.style.display = 'block';
+            }
         }
         
         // Stock status
