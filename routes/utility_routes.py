@@ -18,11 +18,9 @@ from flask import (
 )
 from database.db import get_db
 from middleware.auth import admin_required
+from routes.shared import SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, get_lang as _get_lang
 
 utility_bp = Blueprint('utility', __name__)
-
-DEFAULT_LANGUAGE = 'am'
-SUPPORTED_LANGUAGES = ['am', 'en', 'ar']
 
 
 def _set_lang(lang):
@@ -30,11 +28,6 @@ def _set_lang(lang):
         session['lang'] = lang
         return True
     return False
-
-
-def _get_lang():
-    lang = session.get('lang', DEFAULT_LANGUAGE)
-    return lang if lang in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
 
 
 # ==================== LANGUAGE SWITCHING ====================

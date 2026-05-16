@@ -13,6 +13,7 @@ This module contains all cart-related routes including:
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
 from middleware.auth import user_login_required
 from database.db import get_db
+from routes.shared import calc_cart_totals, FREE_SHIPPING_THRESHOLD, SHIPPING_COST, USER_DISCOUNT_RATE
 import json
 from services.notification_service import notify_user, notify_admin
 
@@ -89,43 +90,20 @@ def view_cart():
                         'subtotal': round(item_subtotal, 2)
                     })
     
-    # Calculate discount (10% for logged in users)
-    discount = 0
-    if session.get('user_id'):
-        discount = subtotal * 0.1
-        subtotal_after_discount = subtotal - discount
-    else:
-        subtotal_after_discount = subtotal
-    
-    # Calculate shipping
-    free_shipping_threshold = 5000
-    if subtotal_after_discount >= free_shipping_threshold:
-        shipping_cost = 0
-        free_shipping = True
-    else:
-        shipping_cost = 200
-        free_shipping = False
-    
-    total = subtotal_after_discount + shipping_cost
-    
+    totals = calc_cart_totals(subtotal, is_logged_in=bool(session.get('user_id')))
+
     # Get site settings
     db = get_db()
     cursor = db.cursor()
     cursor.execute("SELECT key, value FROM settings")
     settings = {row['key']: row['value'] for row in cursor.fetchall()}
     whatsapp_number = settings.get('whatsapp_number', '251906020606')
-    
+
     return render_template('customer/cart.html',
                          cart_items=cart_items,
-                         subtotal=round(subtotal, 2),
-                         discount=round(discount, 2),
-                         subtotal_after_discount=round(subtotal_after_discount, 2),
-                         shipping_cost=shipping_cost,
-                         total=round(total, 2),
-                         free_shipping=free_shipping,
-                         free_shipping_threshold=free_shipping_threshold,
+                         **totals,
                          whatsapp_number=whatsapp_number,
-                         is_logged_in=session.get('user_id') is not None)
+                         is_logged_in=bool(session.get('user_id')))
 
 
 # ==================== ADD TO CART ====================
@@ -339,38 +317,20 @@ def checkout():
         flash('Your cart is empty!', 'warning')
         return redirect(url_for('customer.index'))
     
-    # Calculate totals
+    # Calculate totals (calc_cart_totals applies the 10% logged-in discount)
     subtotal = 0
     for item in cart_items:
-        discounted_price = item['price'] * 0.9  # 10% discount
-        subtotal += discounted_price * item['quantity']
-    
-    discount = subtotal * 0.1 if session.get('user_id') else 0
-    subtotal_after_discount = subtotal - discount
-    
-    free_shipping_threshold = 5000
-    if subtotal_after_discount >= free_shipping_threshold:
-        shipping_cost = 0
-        free_shipping = True
-    else:
-        shipping_cost = 200
-        free_shipping = False
-    
-    total = subtotal_after_discount + shipping_cost
-    
+        subtotal += item['price'] * item['quantity']
+
+    totals = calc_cart_totals(subtotal, is_logged_in=True)
+
     # Get user info for pre-filling
     cursor.execute("SELECT full_name, email, phone, address, city FROM users WHERE id = ?", (session['user_id'],))
     user = cursor.fetchone()
-    
+
     return render_template('customer/checkout.html',
                          cart_items=cart_items,
-                         subtotal=round(subtotal, 2),
-                         discount=round(discount, 2),
-                         subtotal_after_discount=round(subtotal_after_discount, 2),
-                         shipping_cost=shipping_cost,
-                         total=round(total, 2),
-                         free_shipping=free_shipping,
-                         free_shipping_threshold=free_shipping_threshold,
+                         **totals,
                          user=user)
 
 
@@ -406,14 +366,13 @@ def place_order():
     # Calculate totals
     subtotal = 0
     for item in cart_items:
-        discounted_price = item['price'] * 0.9
-        subtotal += discounted_price * item['quantity']
-    
-    discount = subtotal * 0.1
-    subtotal_after_discount = subtotal - discount
-    
-    shipping_cost = 0 if subtotal_after_discount >= 5000 else 200
-    total = subtotal_after_discount + shipping_cost
+        subtotal += item['price'] * item['quantity']
+
+    totals = calc_cart_totals(subtotal, is_logged_in=True)
+    subtotal_after_discount = totals['subtotal_after_discount']
+    shipping_cost = totals['shipping_cost']
+    total = totals['total']
+    discount = totals['discount']
     
     # Generate order number
     from datetime import datetime

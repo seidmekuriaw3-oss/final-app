@@ -32,6 +32,7 @@ from database.models import (
 from middleware.auth import login_required, admin_required, user_login_required, get_current_user, is_authenticated
 from middleware.platform import get_platform, is_android_app
 from utils.translation_cache import translate_text, batch_translate, clear_translation_cache, get_translation_stats, FALLBACK_TEXTS
+from routes.shared import WHATSAPP_NUMBER
 
 
 # ==================== 2. APP INITIALIZATION ====================
@@ -129,7 +130,6 @@ app.logger.addHandler(file_handler)
 app.logger.addHandler(security_handler)
 
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123456')
-WHATSAPP_NUMBER = os.environ.get('WHATSAPP_NUMBER', '251906020606')
 
 
 # ==================== 3. DATABASE INITIALIZATION ====================
@@ -351,7 +351,7 @@ def inject_globals():
     pending_orders_count = 0
     low_stock_count = 0
     unread_messages_count = 0
-    if session.get('admin') or session.get('is_admin'):
+    if session.get('admin'):
         try:
             conn = get_db()
             cur = conn.cursor()

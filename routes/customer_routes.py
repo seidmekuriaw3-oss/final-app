@@ -15,6 +15,7 @@ from database.db import get_db
 from werkzeug.security import generate_password_hash, check_password_hash
 from services.whatsapp_service import WhatsAppService
 from services.notification_service import notify_user, notify_admin
+from routes.shared import get_lang, WHATSAPP_NUMBER, SUPPORTED_LANGUAGES
 import re
 import os
 import urllib.parse
@@ -22,13 +23,6 @@ import datetime as datetime_
 import uuid
 
 customer_bp = Blueprint('customer', __name__)
-
-WHATSAPP_NUMBER = os.environ.get('WHATSAPP_NUMBER', '251906020606')
-SUPPORTED_LANGUAGES = {'am', 'en', 'ar'}
-
-
-def get_lang():
-    return session.get('lang', 'am')
 
 
 # ==================== HOME PAGE ====================

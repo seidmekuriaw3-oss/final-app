@@ -13,6 +13,8 @@ This module contains all API endpoints for AJAX requests including:
 from flask import Blueprint, request, jsonify, session
 from database.db import get_db
 from database.models import Product, Order
+from middleware.auth import is_admin
+from routes.shared import FREE_SHIPPING_THRESHOLD, SHIPPING_COST, calc_cart_totals
 import json
 import re
 
@@ -1142,8 +1144,8 @@ def api_submit_order():
 
         discount = subtotal * 0.1 if android_user else 0
         subtotal_after_discount = subtotal - discount
-        threshold = int(os.environ.get('FREE_SHIPPING_THRESHOLD', '5000'))
-        shipping_cost = 0 if subtotal_after_discount >= threshold else int(os.environ.get('SHIPPING_COST', '200'))
+        threshold = FREE_SHIPPING_THRESHOLD
+        shipping_cost = 0 if subtotal_after_discount >= threshold else SHIPPING_COST
         total = subtotal_after_discount + shipping_cost
 
         import random, string
@@ -1299,7 +1301,7 @@ def api_mark_notifications_read():
 @api_bp.route('/admin/alerts')
 def api_admin_alerts():
     """Return admin alerts (admin only)."""
-    if not session.get('admin'):
+    if not is_admin():
         return jsonify({'success': False}), 403
     from services.notification_service import get_admin_alerts, get_admin_unread_count
     alerts = get_admin_alerts(limit=60)
@@ -1310,7 +1312,7 @@ def api_admin_alerts():
 @api_bp.route('/admin/alerts/count')
 def api_admin_alerts_count():
     """Return unread admin alert count."""
-    if not session.get('admin'):
+    if not is_admin():
         return jsonify({'count': 0})
     from services.notification_service import get_admin_unread_count
     return jsonify({'count': get_admin_unread_count()})
@@ -1318,7 +1320,7 @@ def api_admin_alerts_count():
 
 @api_bp.route('/admin/alerts/mark-read', methods=['POST'])
 def api_admin_mark_alerts_read():
-    if not session.get('admin'):
+    if not is_admin():
         return jsonify({'success': False}), 403
     from services.notification_service import mark_admin_alerts_read
     data = request.get_json(silent=True) or {}

@@ -12,6 +12,7 @@ from flask import (
 from middleware.auth import admin_required
 from database.db import get_db
 from werkzeug.security import generate_password_hash, check_password_hash
+from routes.shared import get_lang, WHATSAPP_NUMBER
 import os
 import json
 import uuid
@@ -24,10 +25,6 @@ from services.notification_service import (
 )
 
 admin_bp = Blueprint('admin', __name__)
-
-
-def get_lang():
-    return session.get('lang', 'am')
 
 
 # ==================== ADMIN LOGIN ====================
