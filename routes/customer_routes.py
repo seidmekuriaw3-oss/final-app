@@ -40,7 +40,6 @@ def index():
     conn = None
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -124,7 +123,6 @@ def products():
 
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -159,7 +157,6 @@ def product_detail(product_id):
     lang = get_lang()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -221,7 +218,6 @@ def categories():
     lang = get_lang()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("""
             SELECT c.*, COUNT(p.id) as product_count
@@ -243,7 +239,6 @@ def category_products(category_id=None):
     lang = get_lang()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
 
         cursor.execute("SELECT * FROM categories WHERE is_active = 1 ORDER BY sort_order ASC")
@@ -304,7 +299,6 @@ def search():
 
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
 
         search_pattern = f'%{query}%'
@@ -341,7 +335,6 @@ def branches():
     lang = get_lang()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY sort_order ASC")
         branches_rows = cursor.fetchall()
@@ -393,7 +386,7 @@ def contact():
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO contact_messages (name, email, phone, message)
-                VALUES (%s, %s, %s, %s)
+                VALUES (?, ?, ?, ?)
             """, (name, email, phone, message))
             conn.commit()
         except Exception as e:
@@ -415,7 +408,6 @@ def contact():
 
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY sort_order ASC")
         branches_rows = cursor.fetchall()
@@ -473,7 +465,6 @@ def user_login():
 
         try:
             conn = get_db()
-            conn.row_factory = __import__('sqlite3').Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM users WHERE email = ? AND is_active = 1", (email,))
             user = cursor.fetchone()
@@ -601,7 +592,6 @@ def user_profile():
     """User profile page."""
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM users WHERE id = ?", (session['user_id'],))
         user = cursor.fetchone()
@@ -696,7 +686,6 @@ def delete_account():
 
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("SELECT password_hash FROM users WHERE id = ?", (session['user_id'],))
         user = cursor.fetchone()
@@ -724,7 +713,6 @@ def user_orders():
     status_filter = _req.args.get('status', '').strip().lower()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         if status_filter == 'delivered':
             cursor.execute(
@@ -756,7 +744,6 @@ def order_detail(order_id):
     """Order detail page."""
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM orders WHERE id = ? AND user_id = ?",
                        (order_id, session['user_id']))
@@ -787,7 +774,6 @@ def order_confirmation(order_id):
     """Order confirmation page."""
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM orders WHERE id = ? AND user_id = ?",
                        (order_id, session['user_id']))
@@ -939,7 +925,6 @@ def track_order(order_number):
     lang = get_lang()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -980,7 +965,6 @@ def wishlist():
     lang = get_lang()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -1010,7 +994,6 @@ def dashboard():
     tab = request.args.get('tab', 'overview')
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
 
         cursor.execute("SELECT * FROM users WHERE id = ?", (session['user_id'],))

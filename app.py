@@ -5,7 +5,6 @@ import sys
 import json
 import uuid
 import time
-import sqlite3
 import logging
 import atexit
 import urllib.parse
@@ -134,29 +133,7 @@ WHATSAPP_NUMBER = os.environ.get('WHATSAPP_NUMBER', '251906020606')
 
 
 # ==================== 3. DATABASE INITIALIZATION ====================
-
-def seed_categories_if_empty():
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM categories")
-        count = cur.fetchone()[0]
-        if count == 0:
-            defaults = [
-                ('Living Room', 'ሳሎን', 'غرفة المعيشة', '🛋️', 1),
-                ('Bedroom', 'መኝታ ክፍል', 'غرفة النوم', '🛏️', 2),
-                ('Office', 'ቢሮ', 'مكتب', '💼', 3),
-                ('Dining', 'መመገቢያ', 'غرفة الطعام', '🍽️', 4),
-            ]
-            cur.executemany(
-                "INSERT INTO categories (name, name_am, name_ar, icon, sort_order) VALUES (?, ?, ?, ?, ?)",
-                defaults
-            )
-            conn.commit()
-            print(f"Seeded {len(defaults)} default categories")
-    except Exception as _e:
-        print(f"seed_categories_if_empty error: {_e}")
-
+# (Tables and seed data are handled by database/db.py → init_db())
 
 # ==================== 4. LANGUAGE & TEXTS ====================
 
@@ -720,36 +697,6 @@ register_routes(app)
 
 with app.app_context():
     initialize_app()
-    seed_categories_if_empty()
-
-
-# ==================== 13. SCHEDULED BACKUP ====================
-
-def scheduled_backup():
-    while True:
-        try:
-            now = datetime_.datetime.now()
-            next_midnight = datetime_.datetime(now.year, now.month, now.day) + datetime_.timedelta(days=1)
-            time.sleep((next_midnight - now).total_seconds())
-            if os.environ.get('AUTO_BACKUP', 'False').lower() == 'true':
-                import shutil
-                db_path = Config.DATABASE_PATH if hasattr(Config, 'DATABASE_PATH') else 'ethiosadat.db'
-                if os.path.exists(db_path):
-                    backup_dir = 'backups'
-                    os.makedirs(backup_dir, exist_ok=True)
-                    timestamp = datetime_.datetime.now().strftime('%Y%m%d')
-                    backup_filename = f"ethiosadat_backup_{timestamp}.db"
-                    backup_path = os.path.join(backup_dir, backup_filename)
-                    shutil.copy2(db_path, backup_path)
-                    app.logger.info(f"Scheduled backup created: {backup_filename}")
-        except Exception as e:
-            app.logger.error(f"Scheduled backup error: {str(e)}")
-            time.sleep(3600)
-
-
-if os.environ.get('AUTO_BACKUP', 'False').lower() == 'true':
-    backup_thread = threading.Thread(target=scheduled_backup, daemon=True)
-    backup_thread.start()
 
 
 # ==================== 14. MAIN ENTRY POINT ====================

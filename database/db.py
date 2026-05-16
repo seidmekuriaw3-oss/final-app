@@ -347,6 +347,43 @@ def init_db():
     cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name TEXT")
     cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_email TEXT")
     cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS loyalty_points INTEGER DEFAULT 0")
+    cur.execute("ALTER TABLE contact_messages ADD COLUMN IF NOT EXISTS admin_notes TEXT")
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS newsletter (
+            id SERIAL PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            subscribed_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS reviews (
+            id SERIAL PRIMARY KEY,
+            product_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+            comment TEXT,
+            is_approved SMALLINT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE (product_id, user_id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS wishlist (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE (user_id, product_id)
+        )
+    """)
+
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_reviews_product ON reviews(product_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_reviews_user ON reviews(user_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_wishlist_user ON wishlist(user_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_newsletter_email ON newsletter(email)")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS loyalty_transactions (

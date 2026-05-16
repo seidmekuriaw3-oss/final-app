@@ -830,7 +830,6 @@ def api_categories():
     """Get all active categories with product counts."""
     try:
         db = get_db()
-        db.row_factory = __import__('sqlite3').Row
         cursor = db.cursor()
         cursor.execute("""
             SELECT c.*, COUNT(p.id) as product_count
@@ -908,7 +907,6 @@ def api_apply_coupon():
             return jsonify({'success': False, 'error': 'Coupon code required'}), 400
 
         db = get_db()
-        db.row_factory = __import__('sqlite3').Row
         cursor = db.cursor()
 
         cursor.execute("""
@@ -969,7 +967,6 @@ def product_reviews(product_id):
     if request.method == 'GET':
         try:
             db = get_db()
-            db.row_factory = __import__('sqlite3').Row
             cursor = db.cursor()
             cursor.execute("""
                 SELECT r.*, u.full_name as user_name
@@ -1115,13 +1112,12 @@ def api_submit_order():
             return jsonify({'success': False, 'error': 'Name and phone number are required'}), 400
 
         db = get_db()
-        db.row_factory = __import__('sqlite3').Row
         cursor = db.cursor()
 
         cursor.execute("""
             SELECT ci.product_id, ci.quantity, p.price, p.name, p.name_am
             FROM cart_items ci JOIN products p ON ci.product_id = p.id
-            WHERE ci.user_id = %s
+            WHERE ci.user_id = ?
         """, (session['user_id'],))
         cart_items = cursor.fetchall()
 
@@ -1159,7 +1155,7 @@ def api_submit_order():
                 order_number, user_id, status, payment_status,
                 subtotal, discount, shipping_fee, total,
                 shipping_address, shipping_phone, notes, customer_name, customer_email
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
         """, (order_number, session['user_id'], 'pending', 'pending',
               subtotal, discount, shipping_cost, total,
               shipping_address, customer_phone, notes, customer_name, customer_email))
@@ -1170,13 +1166,13 @@ def api_submit_order():
         for item in items_list:
             cursor.execute("""
                 INSERT INTO order_items (order_id, product_id, quantity, price_at_time)
-                VALUES (%s, %s, %s, %s)
+                VALUES (?, ?, ?, ?)
             """, (order_id, item['product_id'], item['quantity'], item['price']))
             cursor.execute("""
-                UPDATE products SET stock_quantity = stock_quantity - %s WHERE id = %s
+                UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?
             """, (item['quantity'], item['product_id']))
 
-        cursor.execute("DELETE FROM cart_items WHERE user_id = %s", (session['user_id'],))
+        cursor.execute("DELETE FROM cart_items WHERE user_id = ?", (session['user_id'],))
         db.commit()
 
         return jsonify({
@@ -1242,7 +1238,6 @@ def api_track_order():
         return jsonify({'success': False, 'error': 'Order number is required'}), 400
     try:
         db = get_db()
-        db.row_factory = __import__('sqlite3').Row
         cursor = db.cursor()
         cursor.execute("""
             SELECT o.id, o.order_number, o.status, o.total,

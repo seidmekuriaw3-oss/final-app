@@ -142,7 +142,6 @@ def products():
     lang = get_lang()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("""
             SELECT p.*, c.name as category_name
@@ -165,7 +164,6 @@ def product_create():
     lang = get_lang()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("SELECT id, name, name_am FROM categories ORDER BY sort_order")
         categories = [dict(c) for c in cursor.fetchall()]
@@ -230,7 +228,6 @@ def product_edit(pid):
     lang = get_lang()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM products WHERE id = ?", (pid,))
         product = cursor.fetchone()
@@ -382,7 +379,6 @@ def bulk_delete_products():
 def export_products():
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("""
             SELECT p.id, p.name, p.name_am, p.name_ar, p.price, p.compare_price,
@@ -442,7 +438,6 @@ def import_products():
     csrf_token = session['import_csrf']
 
     conn = get_db()
-    conn.row_factory = __import__('sqlite3').Row
     cursor = conn.cursor()
     cursor.execute("SELECT id, name, name_am FROM categories WHERE is_active = 1 ORDER BY sort_order")
     categories_list = [dict(c) for c in cursor.fetchall()]
@@ -619,7 +614,6 @@ def ads():
     lang = get_lang()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM advertisements ORDER BY sort_order ASC, id DESC")
         ads_list = cursor.fetchall()
@@ -678,7 +672,6 @@ def ad_create():
 @admin_required
 def ad_edit(aid):
     conn = get_db()
-    conn.row_factory = __import__('sqlite3').Row
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM advertisements WHERE id = ?", (aid,))
     ad = cursor.fetchone()
@@ -787,7 +780,6 @@ def orders():
     lang = get_lang()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
 
         status = request.args.get('status', 'all')
@@ -829,7 +821,6 @@ def order_detail(oid):
     lang = get_lang()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -954,7 +945,6 @@ def delete_order(oid):
 def export_order(oid):
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -994,7 +984,6 @@ def export_order(oid):
 def order_invoice(oid):
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
 
         cursor.execute("SELECT * FROM orders WHERE id = ?", (oid,))
@@ -1086,7 +1075,6 @@ def admin_users():
 def toggle_user(uid):
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("SELECT is_active, is_admin FROM users WHERE id = ?", (uid,))
         user = cursor.fetchone()
@@ -1107,7 +1095,6 @@ def toggle_user(uid):
 def delete_user(uid):
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("SELECT is_admin FROM users WHERE id = ?", (uid,))
         user = cursor.fetchone()
@@ -1171,12 +1158,12 @@ def inbox_mark_read(mid):
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT is_read FROM contact_messages WHERE id = %s", (mid,))
+        cursor.execute("SELECT is_read FROM contact_messages WHERE id = ?", (mid,))
         row = cursor.fetchone()
         if not row:
             return jsonify({'success': False, 'error': 'Message not found'}), 404
         new_status = 0 if row['is_read'] else 1
-        cursor.execute("UPDATE contact_messages SET is_read = %s WHERE id = %s", (new_status, mid))
+        cursor.execute("UPDATE contact_messages SET is_read = ? WHERE id = ?", (new_status, mid))
         conn.commit()
         return jsonify({'success': True, 'is_read': new_status})
     except Exception as e:
@@ -1203,7 +1190,7 @@ def inbox_delete(mid):
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM contact_messages WHERE id = %s", (mid,))
+        cursor.execute("DELETE FROM contact_messages WHERE id = ?", (mid,))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'success': False, 'error': 'Message not found'}), 404
@@ -1220,10 +1207,10 @@ def inbox_save_note(mid):
         note = data.get('note', '').strip()
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM contact_messages WHERE id = %s", (mid,))
+        cursor.execute("SELECT id FROM contact_messages WHERE id = ?", (mid,))
         if not cursor.fetchone():
             return jsonify({'success': False, 'error': 'Message not found'}), 404
-        cursor.execute("UPDATE contact_messages SET admin_notes = %s WHERE id = %s",
+        cursor.execute("UPDATE contact_messages SET admin_notes = ? WHERE id = ?",
                        (note if note else None, mid))
         conn.commit()
         return jsonify({'success': True, 'note': note})
@@ -1328,10 +1315,10 @@ def reports_sales():
         """
         params = []
         if start_date:
-            query += " AND DATE(o.created_at) >= %s"
+            query += " AND DATE(o.created_at) >= ?"
             params.append(start_date)
         if end_date:
-            query += " AND DATE(o.created_at) <= %s"
+            query += " AND DATE(o.created_at) <= ?"
             params.append(end_date)
         query += " ORDER BY o.created_at DESC"
         cursor.execute(query, params)
@@ -1542,19 +1529,10 @@ def clear_cache():
 @admin_required
 def backup_database():
     try:
-        import shutil
-        from config import Config
-        db_path = Config.DATABASE_PATH if hasattr(Config, 'DATABASE_PATH') else 'ethiosadat.db'
-        if not os.path.exists(db_path):
-            return jsonify({'success': False, 'error': 'Database file not found (PostgreSQL cannot be backed up this way)'}), 404
-
-        backup_dir = 'backups'
-        os.makedirs(backup_dir, exist_ok=True)
-        timestamp = datetime_.datetime.now().strftime('%Y%m%d_%H%M%S')
-        backup_filename = f"ethiosadat_backup_{timestamp}.db"
-        backup_path = os.path.join(backup_dir, backup_filename)
-        shutil.copy2(db_path, backup_path)
-        return send_from_directory(backup_dir, backup_filename, as_attachment=True)
+        return jsonify({
+            'success': False,
+            'error': 'This app uses PostgreSQL. Use pg_dump from the shell or Replit Database panel to back up.'
+        }), 400
     except Exception as e:
         print(f"Backup error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1638,7 +1616,6 @@ def admin_reviews():
     lang = get_lang()
     try:
         conn = get_db()
-        conn.row_factory = __import__('sqlite3').Row
         cursor = conn.cursor()
         cursor.execute("""
             SELECT r.*, p.name_am as product_name, u.full_name as user_name

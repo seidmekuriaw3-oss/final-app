@@ -18634,3 +18634,4 @@ werkzeug.routing.exceptions.BuildError: Could not build url for endpoint 'user_l
 2026-05-15 17:04:40,191 - app - WARNING - Slow request: POST /admin/products/create - 2.46s
 2026-05-15 17:06:31,047 - app - WARNING - Slow request: POST /admin/ads/create - 2.09s
 2026-05-15 17:06:39,140 - app - WARNING - Slow request: POST /admin/ads/create - 8.91s
+2026-05-15 17:55:50,136 - app - WARNING - Slow request: POST /admin/ads/create - 2.08s
