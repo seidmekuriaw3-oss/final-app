@@ -971,20 +971,55 @@ def product_reviews(product_id):
             db = get_db()
             cursor = db.cursor()
             cursor.execute("""
-                SELECT r.*, u.full_name as user_name
+                SELECT r.id, r.rating, r.comment, r.is_approved,
+                       r.created_at, u.full_name as user_name
                 FROM reviews r JOIN users u ON r.user_id = u.id
                 WHERE r.product_id = ? AND r.is_approved = 1
-                ORDER BY r.created_at DESC LIMIT 20
+                ORDER BY r.created_at DESC LIMIT 30
             """, (product_id,))
-            reviews = cursor.fetchall()
-            reviews_list = [dict(r) for r in reviews] if reviews else []
+            rows = cursor.fetchall()
+            reviews_list = []
+            for row in (rows or []):
+                r = dict(row)
+                if r.get('created_at') and not isinstance(r['created_at'], str):
+                    r['created_at'] = r['created_at'].strftime('%b %d, %Y')
+                reviews_list.append(r)
+
             avg_rating = (sum(r['rating'] for r in reviews_list) / len(reviews_list)
                           if reviews_list else 0)
+
+            # Rating distribution
+            dist = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+            for r in reviews_list:
+                dist[int(r['rating'])] += 1
+
+            # Current user's review status
+            user_review = None
+            has_purchased = False
+            if session.get('user_id'):
+                cursor.execute("SELECT rating, comment FROM reviews WHERE product_id=? AND user_id=?",
+                               (product_id, session['user_id']))
+                ur = cursor.fetchone()
+                if ur:
+                    user_review = dict(ur)
+                # Check purchase
+                cursor.execute("""
+                    SELECT 1 FROM order_items oi
+                    JOIN orders o ON oi.order_id = o.id
+                    WHERE oi.product_id = ? AND o.user_id = ? AND o.status = 'delivered'
+                    LIMIT 1
+                """, (product_id, session['user_id']))
+                has_purchased = cursor.fetchone() is not None
+
             return jsonify({
                 'success': True,
                 'reviews': reviews_list,
                 'average_rating': round(avg_rating, 1),
-                'total_reviews': len(reviews_list)
+                'total_reviews': len(reviews_list),
+                'distribution': dist,
+                'user_review': user_review,
+                'has_purchased': has_purchased,
+                'is_logged_in': bool(session.get('user_id'))
             })
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -993,8 +1028,8 @@ def product_reviews(product_id):
     if not session.get('user_id'):
         return jsonify({'success': False, 'error': 'Please login to leave a review'}), 401
     try:
-        data = request.get_json()
-        rating = data.get('rating', 0)
+        data = request.get_json(silent=True) or {}
+        rating = int(data.get('rating', 0))
         comment = data.get('comment', '').strip()
 
         if rating < 1 or rating > 5:
@@ -1014,6 +1049,19 @@ def product_reviews(product_id):
             VALUES (?, ?, ?, ?, 0)
         """, (product_id, session['user_id'], rating, comment))
         db.commit()
+
+        # Notify admin of new review
+        try:
+            from services.notification_service import notify_admin
+            notify_admin(
+                title='New Product Review',
+                body=f'A customer left a {rating}⭐ review — awaiting approval.',
+                type='info',
+                link='/admin/reviews'
+            )
+        except Exception:
+            pass
+
         return jsonify({'success': True, 'message': 'Review submitted! Awaiting approval.'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

@@ -194,6 +194,19 @@ def product_detail(product_id):
         if is_logged_in:
             final_price = product_dict['price'] * 0.9
 
+        # Fetch live avg rating for this product
+        try:
+            cursor.execute("""
+                SELECT AVG(rating) as avg_r, COUNT(*) as cnt
+                FROM reviews WHERE product_id = ? AND is_approved = 1
+            """, (product_id,))
+            rrow = cursor.fetchone()
+            product_dict['rating'] = round(rrow[0], 1) if rrow and rrow[0] else 0
+            product_dict['reviews'] = rrow[1] if rrow else 0
+        except Exception:
+            product_dict['rating'] = 0
+            product_dict['reviews'] = 0
+
         return render_template('customer/product_detail.html',
                                product=product_dict, related_products=related_list,
                                discount=discount, final_price=round(final_price, 2),
