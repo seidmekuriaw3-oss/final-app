@@ -41,11 +41,11 @@ def view_cart():
         
         rows = cursor.fetchall()
         for row in rows:
-            # Apply 10% discount for logged in users
-            discounted_price = row['price'] * 0.9
-            item_subtotal = discounted_price * row['quantity']
-            subtotal += item_subtotal
-            
+            discounted_price = round(row['price'] * 0.9, 2)
+            # Subtotal uses ORIGINAL price — calc_cart_totals applies the 10% once
+            orig_subtotal = row['price'] * row['quantity']
+            subtotal += orig_subtotal
+
             cart_items.append({
                 'id': row['id'],
                 'product_id': row['product_id'],
@@ -53,11 +53,11 @@ def view_cart():
                 'name_am': row['name_am'],
                 'name_ar': row['name_ar'],
                 'price': row['price'],
-                'discounted_price': round(discounted_price, 2),
+                'discounted_price': discounted_price,
                 'quantity': row['quantity'],
                 'thumbnail': row['thumbnail'],
                 'stock_quantity': row['stock_quantity'],
-                'subtotal': round(item_subtotal, 2)
+                'subtotal': round(discounted_price * row['quantity'], 2)
             })
     else:
         # Get cart from session
@@ -311,17 +311,33 @@ def checkout():
         WHERE ci.user_id = ?
     """, (session['user_id'],))
     
-    cart_items = cursor.fetchall()
-    
-    if not cart_items:
+    raw_items = cursor.fetchall()
+
+    if not raw_items:
         flash('Your cart is empty!', 'warning')
         return redirect(url_for('customer.index'))
-    
-    # Calculate totals (calc_cart_totals applies the 10% logged-in discount)
-    subtotal = 0
-    for item in cart_items:
-        subtotal += item['price'] * item['quantity']
 
+    # Build enriched cart items with discounted_price for template display
+    cart_items = []
+    subtotal = 0
+    for item in raw_items:
+        orig_price = item['price']
+        discounted_price = round(orig_price * 0.9, 2)
+        subtotal += orig_price * item['quantity']
+        cart_items.append({
+            'id': item['id'] if 'id' in item.keys() else None,
+            'product_id': item['product_id'],
+            'name': item['name'],
+            'name_am': item['name_am'],
+            'name_ar': item['name_ar'],
+            'price': orig_price,
+            'discounted_price': discounted_price,
+            'quantity': item['quantity'],
+            'thumbnail': item['thumbnail'],
+            'subtotal': round(discounted_price * item['quantity'], 2),
+        })
+
+    # calc_cart_totals applies the 10% discount exactly once on original subtotal
     totals = calc_cart_totals(subtotal, is_logged_in=True)
 
     # Get user info for pre-filling

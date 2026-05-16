@@ -431,26 +431,21 @@ def api_get_cart():
                         'subtotal': item_subtotal
                     })
     
-    # Calculate shipping
-    free_shipping_threshold = 5000
-    shipping_cost = 0 if subtotal >= free_shipping_threshold else 200
-    total = subtotal + shipping_cost
-    
-    # Apply 10% discount for logged in users
-    discount = 0
-    if session.get('user_id'):
-        discount = subtotal * 0.1
-        total = subtotal - discount + shipping_cost
-    
+    # Apply 10% discount for logged in users (once, on original subtotal)
+    is_logged_in = bool(session.get('user_id'))
+    totals = calc_cart_totals(subtotal, is_logged_in=is_logged_in)
+
     return jsonify({
         'success': True,
         'items': cart_items,
         'item_count': len(cart_items),
-        'subtotal': round(subtotal, 2),
-        'discount': round(discount, 2),
-        'shipping_cost': shipping_cost,
-        'total': round(total, 2),
-        'free_shipping_threshold': free_shipping_threshold
+        'subtotal': totals['subtotal'],
+        'discount': totals['discount'],
+        'subtotal_after_discount': totals['subtotal_after_discount'],
+        'shipping_cost': totals['shipping_cost'],
+        'total': totals['total'],
+        'free_shipping': totals['free_shipping'],
+        'free_shipping_threshold': totals['free_shipping_threshold'],
     })
 
 
@@ -650,22 +645,22 @@ def api_place_order():
     if not cart_items:
         return jsonify({'success': False, 'error': 'Cart is empty'}), 400
     
-    # Calculate totals
+    # Calculate totals — discount applied once via calc_cart_totals
     subtotal = 0
     items_list = []
     for item in cart_items:
-        item_subtotal = item['price'] * item['quantity']
-        subtotal += item_subtotal
+        orig_price = item['price']
+        subtotal += orig_price * item['quantity']
         items_list.append({
             'product_id': item['product_id'],
             'quantity': item['quantity'],
-            'price': item['price']
+            'price': round(orig_price * 0.9, 2)   # store discounted price_at_time
         })
-    
-    # Apply 10% discount
-    discount = subtotal * 0.1
-    shipping_cost = 200 if subtotal < 5000 else 0
-    total = subtotal - discount + shipping_cost
+
+    totals = calc_cart_totals(subtotal, is_logged_in=True)
+    discount = totals['discount']
+    shipping_cost = totals['shipping_cost']
+    total = totals['total']
     
     # Generate order number
     from datetime import datetime
@@ -1182,19 +1177,21 @@ def api_submit_order():
         for item in cart_items:
             price = item['price'] or 0
             qty = item['quantity'] or 1
-            unit_price = price * 0.9 if android_user else price
-            subtotal += unit_price * qty
+            subtotal += price * qty          # always use original price for subtotal
             items_list.append({
                 'product_id': item['product_id'], 'quantity': qty,
-                'price': unit_price, 'name': item['name'],
+                'price': round(price * 0.9, 2) if android_user else price,
+                'name': item['name'],
                 'name_am': item['name_am'] or item['name'],
             })
 
-        discount = subtotal * 0.1 if android_user else 0
-        subtotal_after_discount = subtotal - discount
-        threshold = FREE_SHIPPING_THRESHOLD
-        shipping_cost = 0 if subtotal_after_discount >= threshold else SHIPPING_COST
-        total = subtotal_after_discount + shipping_cost
+        # calc_cart_totals applies the 10% exactly once on original subtotal
+        from routes.shared import calc_cart_totals as _cct
+        _totals = _cct(subtotal, is_logged_in=android_user)
+        discount = _totals['discount']
+        subtotal_after_discount = _totals['subtotal_after_discount']
+        shipping_cost = _totals['shipping_cost']
+        total = _totals['total']
 
         import random, string
         from datetime import datetime as _dt
